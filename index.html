@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社内LIFFアプリ</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { padding-bottom: 80px; }
+  .tab-btn.active { color:#16a34a; font-weight:700; }
+  .hidden-section { display:none; }
+  .loading-mask {
+    position:fixed; inset:0; background:rgba(255,255,255,0.7);
+    display:flex; align-items:center; justify-content:center; z-index:9999;
+  }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<!-- ローディング -->
+<div id="loadingMask" class="loading-mask" style="display:none">
+  <div class="text-center">
+    <div class="animate-spin w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm text-gray-600">読み込み中...</p>
+  </div>
+</div>
+
+<!-- ヘッダー -->
+<header class="bg-green-600 text-white p-4 shadow">
+  <h1 class="text-lg font-bold">社内LIFFアプリ</h1>
+  <p id="userName" class="text-xs opacity-90 mt-1">ユーザー情報取得中...</p>
+</header>
+
+<main class="p-4">
+
+  <!-- 共通アラート -->
+  <div id="alert" class="hidden rounded p-3 mb-4 text-sm"></div>
+
+  <!-- ================ 出退勤 ================ -->
+  <section id="tab-attendance" class="section">
+    <h2 class="text-lg font-bold mb-3">出退勤</h2>
+
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <div>
+        <label class="block text-sm font-semibold mb-2">区分</label>
+        <div class="flex gap-2">
+          <button type="button" data-att-type="in"  class="att-type-btn flex-1 py-2 rounded border">出勤</button>
+          <button type="button" data-att-type="out" class="att-type-btn flex-1 py-2 rounded border">退勤</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">位置情報</label>
+        <button type="button" id="btnAttGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
+        <p id="attGeoText" class="text-xs text-gray-500 mt-1">未取得</p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold mb-2">アルコール値</label>
+        <input type="number" step="0.01" min="0" id="attAlcohol" class="w-full border rounded p-2" placeholder="0.00">
+      </div>
+
+      <button type="button" id="btnAttSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+    </div>
+  </section>
+
+  <!-- ================ 業務報告 ================ -->
+  <section id="tab-business" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">業務報告</h2>
+
+    <!-- 状態A: 未開始 -->
+    <div id="bizIdle" class="bg-white rounded shadow p-4 space-y-4">
+      <div>
+        <label class="block text-sm font-semibold mb-2">業務区分</label>
+        <div id="bizTypeButtons" class="grid grid-cols-2 gap-2"></div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-2">位置情報</label>
+        <button type="button" id="btnBizStartGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
+        <p id="bizStartGeoText" class="text-xs text-gray-500 mt-1">未取得</p>
+      </div>
+      <button type="button" id="btnBizStart" class="w-full py-3 bg-green-600 text-white font-bold rounded">業務開始</button>
+    </div>
+
+    <!-- 状態B: 進行中 -->
+    <div id="bizActive" class="bg-white rounded shadow p-4 space-y-4 hidden-section">
+      <div class="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-sm">
+        <strong>進行中：</strong><span id="bizActiveType"></span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btnBizDropoffMode" class="py-2 rounded border">立ち寄り</button>
+        <button type="button" id="btnBizEndMode" class="py-2 rounded border">終了</button>
+      </div>
+
+      <div id="bizActionForm" class="space-y-3">
+        <div>
+          <label class="block text-sm font-semibold mb-2">位置情報</label>
+          <button type="button" id="btnBizActionGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
+          <p id="bizActionGeoText" class="text-xs text-gray-500 mt-1">未取得</p>
+        </div>
+        <div id="bizEndContentBlock" class="hidden-section">
+          <label class="block text-sm font-semibold mb-2">業務内容</label>
+          <textarea id="bizEndContent" rows="4" class="w-full border rounded p-2" placeholder="業務の詳細"></textarea>
+        </div>
+        <button type="button" id="btnBizActionSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================ 車両関係 ================ -->
+  <section id="tab-vehicle" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">車両関係</h2>
+
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <!-- 車両選択 -->
+      <div>
+        <label class="block text-sm font-semibold mb-2">車両選択</label>
+        <select id="vehicleSelect" class="w-full border rounded p-2">
+          <option value="">-- 車両を選択 --</option>
+        </select>
+      </div>
+
+      <!-- サブ機能選択 -->
+      <div>
+        <label class="block text-sm font-semibold mb-2">項目</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-vsub="refuel"    class="vsub-btn py-2 rounded border">給油</button>
+          <button type="button" data-vsub="oil"       class="vsub-btn py-2 rounded border">オイル交換</button>
+          <button type="button" data-vsub="condition" class="vsub-btn py-2 rounded border">車両状態</button>
+        </div>
+      </div>
+
+      <!-- 給油フォーム -->
+      <div id="vForm-refuel" class="vForm hidden-section space-y-3">
+        <div>
+          <label class="block text-sm font-semibold mb-1">給油量 (L)</label>
+          <input type="number" step="0.01" min="0" id="vRefuelLiter" class="w-full border rounded p-2" placeholder="例: 30.5">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">金額 (円)</label>
+          <input type="number" step="1" min="0" id="vRefuelAmount" class="w-full border rounded p-2" placeholder="例: 4800">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">走行距離 (km)</label>
+          <input type="number" step="1" min="0" id="vRefuelOdo" class="w-full border rounded p-2" placeholder="例: 54210">
+        </div>
+      </div>
+
+      <!-- オイル交換フォーム -->
+      <div id="vForm-oil" class="vForm hidden-section space-y-3">
+        <div>
+          <label class="block text-sm font-semibold mb-1">実施時走行距離 (km)</label>
+          <input type="number" step="1" min="0" id="vOilOdo" class="w-full border rounded p-2" placeholder="例: 54210">
+        </div>
+      </div>
+
+      <!-- 車両状態フォーム -->
+      <div id="vForm-condition" class="vForm hidden-section space-y-3">
+        <div>
+          <label class="block text-sm font-semibold mb-1">異常有無</label>
+          <div class="flex gap-2">
+            <label class="flex-1 border rounded p-2 text-center cursor-pointer">
+              <input type="radio" name="vCondAbn" value="no" class="mr-1"> 異常なし
+            </label>
+            <label class="flex-1 border rounded p-2 text-center cursor-pointer">
+              <input type="radio" name="vCondAbn" value="yes" class="mr-1"> 異常あり
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">備考</label>
+          <textarea id="vCondNote" rows="3" class="w-full border rounded p-2" placeholder="異常時の詳細・気づいた点など"></textarea>
+        </div>
+      </div>
+
+      <button type="button" id="btnVehicleSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+    </div>
+  </section>
+
+  <!-- ================ 完了報告 ================ -->
+  <section id="tab-completion" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">完了報告</h2>
+
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <div>
+        <label class="block text-sm font-semibold mb-2">本日の総括</label>
+        <textarea id="completionText" rows="8" class="w-full border rounded p-2"
+                  placeholder="本日の業務内容・トピックをまとめて記載"></textarea>
+      </div>
+      <button type="button" id="btnCompletionSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+    </div>
+  </section>
+
+  <!-- ================ 社内情報 ================ -->
+  <section id="tab-info" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">社内情報</h2>
+
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <div>
+        <h3 class="font-semibold text-sm mb-2">シフト管理</h3>
+        <a id="shiftLink"
+           href="https://drive.google.com/drive/folders/0AIkRkIY2oKyBUk9PVA"
+           target="_blank" rel="noopener"
+           class="block w-full text-center py-3 bg-blue-500 text-white font-bold rounded">
+          シフト管理フォルダを開く
+        </a>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-sm mb-2">社内お知らせ</h3>
+        <div id="noticeArea" class="text-sm text-gray-600 border rounded p-3 bg-gray-50">
+          お知らせはありません。
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 下部固定タブ -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around shadow-lg">
+  <button data-tab="attendance" class="tab-btn flex-1 py-3 text-xs active">出退勤</button>
+  <button data-tab="business"   class="tab-btn flex-1 py-3 text-xs">業務報告</button>
+  <button data-tab="vehicle"    class="tab-btn flex-1 py-3 text-xs">車両関係</button>
+  <button data-tab="completion" class="tab-btn flex-1 py-3 text-xs">完了報告</button>
+  <button data-tab="info"       class="tab-btn flex-1 py-3 text-xs">社内情報</button>
+</nav>
+
+<script>
+/*********************************************************************
+ * 設定値（要差し替え）
+ *********************************************************************/
+const LIFF_ID      = '2009892557-Iki3540A';
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwiEXWmwwhkdy8toQ_QnCHGeaxBdOZ6UqBHeyuf0WHza61E48OPGjJvYVWucoWxihBtAA/exec';
+
+/*********************************************************************
+ * 定数
+ *********************************************************************/
+const BUSINESS_TYPES = ['案件業務', '営業業務', '事務業務', '移動業務'];
+
+/*********************************************************************
+ * グローバル状態
+ *********************************************************************/
+let userId = '';
+let displayName = '';
+
+// 出退勤
+let attType = null;       // 'in' | 'out'
+let attGeo  = null;       // {lat, lng}
+
+// 業務報告
+let bizStartType = null;  // start時の業務区分
+let bizStartGeo  = null;
+let bizActionMode = null; // 'dropoff' | 'end'
+let bizActionGeo  = null;
+
+// 車両
+let vehicleSubType = null; // 'refuel' | 'oil' | 'condition'
+
+/*********************************************************************
+ * 通信: POST（プリフライト回避のため text/plain）
+ *********************************************************************/
+async function apiPost(payload) {
+  const res = await fetch(GAS_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch (_) { return { ok:false, error:'invalid response: '+text }; }
+}
+
+/*********************************************************************
+ * UI ユーティリティ
+ *********************************************************************/
+function showLoading(b) {
+  document.getElementById('loadingMask').style.display = b ? 'flex' : 'none';
+}
+function showAlert(type, msg) {
+  const el = document.getElementById('alert');
+  el.className = 'rounded p-3 mb-4 text-sm ' +
+    (type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 4000);
+}
+function getGeo() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('位置情報非対応'));
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      e => reject(e),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+/*********************************************************************
+ * タブ切替
+ *********************************************************************/
+function switchTab(name) {
+  document.querySelectorAll('.section').forEach(el => {
+    el.classList.toggle('hidden-section', el.id !== 'tab-' + name);
+  });
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  if (name === 'business')   loadBusinessStatus();
+  if (name === 'vehicle')    loadVehicleList();
+}
+document.querySelectorAll('.tab-btn').forEach(b => {
+  b.addEventListener('click', () => switchTab(b.dataset.tab));
+});
+
+/*********************************************************************
+ * 出退勤
+ *********************************************************************/
+document.querySelectorAll('.att-type-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    attType = btn.dataset.attType;
+    document.querySelectorAll('.att-type-btn').forEach(b =>
+      b.classList.toggle('bg-green-100', b === btn));
+  });
+});
+document.getElementById('btnAttGeo').addEventListener('click', async () => {
+  try {
+    showLoading(true);
+    attGeo = await getGeo();
+    document.getElementById('attGeoText').textContent =
+      `取得済: ${attGeo.lat.toFixed(5)}, ${attGeo.lng.toFixed(5)}`;
+  } catch (e) {
+    showAlert('error', '位置情報取得失敗: ' + e.message);
+  } finally { showLoading(false); }
+});
+document.getElementById('btnAttSubmit').addEventListener('click', async () => {
+  if (!attType) return showAlert('error', '区分を選択してください');
+  if (!attGeo)  return showAlert('error', '位置情報を取得してください');
+  const alc = document.getElementById('attAlcohol').value;
+  if (alc === '' || isNaN(Number(alc))) return showAlert('error', 'アルコール値を入力');
+
+  const btn = document.getElementById('btnAttSubmit');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost({
+    action: 'attendance',
+    userId, type: attType, lat: attGeo.lat, lng: attGeo.lng, alcohol: Number(alc)
+  });
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', '送信しました');
+  // 送信後はフォーム値リセットして珩まる（closeWindowは呼ばない）
+  document.getElementById('attAlcohol').value = '';
+  attType = null; attGeo = null;
+  document.getElementById('attGeoText').textContent = '未取得';
+  document.querySelectorAll('.att-type-btn').forEach(b => b.classList.remove('bg-green-100'));
+});
+
+/*********************************************************************
+ * 業務報告
+ ********************************************************************/
+// 業務区分ボタン生成
+(function renderBizTypeBtns(){
+  const box = document.getElementById('bizTypeButtons');
+  BUSINESS_TYPES.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = t;
+    b.className = 'py-2 rounded border';
+    b.addEventListener('click', () => {
+      bizStartType = t;
+      document.querySelectorAll('#bizTypeButtons button').forEach(x =>
+        x.classList.toggle('bg-green-100', x === b));
+    });
+    box.appendChild(b);
+  });
+})();
+
+document.getElementById('btnBizStartGeo').addEventListener('click', async () => {
+  try { showLoading(true); bizStartGeo = await getGeo();
+    document.getElementById('bizStartGeoText').textContent =
+      `取得済: ${bizStartGeo.lat.toFixed(5)}, ${bizStartGeo.lng.toFixed(5)}`;
+  } catch(e){ showAlert('error','位置情報取得失敗: '+e.message); }
+  finally { showLoading(false); }
+});
+document.getElementById('btnBizStart').addEventListener('click', async () => {
+  if (!bizStartType) return showAlert('error', '業務区分を選択してください');
+  if (!bizStartGeo)  return showAlert('error', '位置情報を取得してください');
+  const btn = document.getElementById('btnBizStart');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost({
+    action: 'business_report', userId, status: 'start',
+    businessType: bizStartType, lat: bizStartGeo.lat, lng: bizStartGeo.lng
+  });
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', '業務を開始しました');
+  loadBusinessStatus();
+});
+
+// 立ち寄り / 終了 モード切替
+document.getElementById('btnBizDropoffMode').addEventListener('click', () => {
+  bizActionMode = 'dropoff';
+  document.getElementById('btnBizDropoffMode').classList.add('bg-green-100');
+  document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
+  document.getElementById('bizEndContentBlock').classList.add('hidden-section');
+});
+document.getElementById('btnBizEndMode').addEventListener('click', () => {
+  bizActionMode = 'end';
+  document.getElementById('btnBizEndMode').classList.add('bg-green-100');
+  document.getElementById('btnBizDropoffMode').classList.remove('bg-greenn-100');
+  document.getElementById('bizEndContentBlock').classList.remove('hidden-section');
+});
+document.getElementById('btnBizActionGeo').addEventListener('click', async () => {
+  try { showLoading(true); bizActionGeo = await getGeo();
+    document.getElementById('bizActionGeoText').textContent =
+      `取得済: ${bizActionGeo.lat.toFixed(5)}, ${bizActionGeo.lng.toFixed(5)}`;
+  } catch(e){ showAlert('error','位置情報取得失敗: '+e.message); }
+  finally { showLoading(false); }
+});
+document.getElementById('btnBizActionSubmit').addEventListener('click', async () => {
+  if (!bizActionMode) return showAlert('error', '「立ち寄り」または「終了」を選択');
+  if (!bizActionGeo)  return showAlert('error', '位置情報を取得してください');
+  const payload = {
+    action: 'business_report', userId, status: bizActionMode,
+    lat: bizActionGeo.lat, lng: bizActionGeo.lng
+  };
+  if (bizActionMode === 'end') {
+    const content = document.getElementById('bizEndContent').value.trim();
+    if (!content) return showAlert('error', '業務内容を入力してください');
+    payload.content = content;
+  }
+  const btn = document.getElementById('btnBizActionSubmit');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost(payload);
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', bizActionMode === 'end' ? '業務を終了しました' : '立ち寄りを記録しました');
+  if (bizActionMode === 'end') loadBusinessStatus();
+});
+
+async function loadBusinessStatus() {
+  if (!userId) return;
+  showLoading(true);
+  const res = await apiPost({ action: 'business_status', userId });
+  showLoading(false);
+  const idle   = document.getElementById('bizIdle');
+  const active = document.getElementById('bizActive');
+  if (res.ok && res.status === 'in_progress') {
+    idle.classList.add('hidden-section');
+    active.classList.remove('hidden-section');
+    document.getElementById('bizActiveType').textContent = res.businessType || '';
+  } else {
+    idle.classList.remove('hidden-section');
+    active.classList.add('hidden-section');
+  }
+  // リセット
+  bizActionMode = null; bizActionGeo = null;
+  document.getElementById('bizActionGeoText').textContent = '未取得';
+  document.getElementById('bizEndContent').value = '';
+  document.getElementById('bizEndContentBlock').classList.add('hidden-section');
+  document.getElementById('btnBizDropoffMode').classList.remove('bg-green-100');
+  document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
+}
+
+/*********************************************************************
+ * 車両関係
+ *********************************************************************/
+async function loadVehicleList() {
+  const sel = document.getElementById('vehicleSelect');
+  if (sel.options.length > 1) return; // 既に読み込み済み
+  showLoading(true);
+  const res = await apiPost({ action: 'vehicle_list' });
+  showLoading(false);
+  if (res.ok && Array.isArray(res.vehicles)) {
+    res.vehicles.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v.id; o.textContent = v.label;
+      sel.appendChild(o);
+    });
+  }
+}
+
+document.querySelectorAll('.vsub-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    vehicleSubType = btn.dataset.vsub;
+    document.querySelectorAll('.vsub-btn').forEach(b =>
+      b.classList.toggle('bg-green-100', b === btn));
+    document.querySelectorAll('.vForm').forEach(f =>
+      f.classList.toggle('hidden-section', f.id !== 'vForm-' + vehicleSubType));
+  });
+});
+
+document.getElementById('btnVehicleSubmit').addEventListener('click', async () => {
+  const vehicleId = document.getElementById('vehicleSelect').value;
+  if (!vehicleId)      return showAlert('error', '車両を選択してください');
+  if (!vehicleSubType) return showAlert('error', '項目を選択してください');
+
+  const payload = { action: 'vehicle', userId, subType: vehicleSubType, vehicleId };
+
+  if (vehicleSubType === 'refuel') {
+    const liter  = document.getElementById('vRefuelLiter').value;
+    const amount = document.getElementById('vRefuelAmount').value;
+    const odo    = document.getElementById('vRefuelOdo').value;
+    if (liter === '' || amount === '' || odo === '')
+      return showAlert('error', '給油量・金額・走行距離を入力してください');
+    payload.liter  = Number(liter);
+    payload.amount = Number(amount);
+    payload.odo    = Number(odo);
+  } else if (vehicleSubType === 'oil') {
+    const odo = document.getElementById('vOilOdo').value;
+    if (odo === '') return showAlert('error', '走行距離を入力してください');
+    payload.odo = Number(odo);
+  } else if (vehicleSubType === 'condition') {
+    const sel = document.querySelector('input[name="vCondAbn"]:checked');
+    if (!sel) return showAlert('error', '異常有無を選択してください');
+    payload.abnormal = sel.value; // 'yes' / 'no'
+    payload.note = document.getElementById('vCondNote').value.trim();
+  }
+
+  const btn = document.getElementById('btnVehicleSubmit');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost(payload);
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', '送信しました');
+  // フォームリセット
+  document.querySelectorAll('#tab-vehicle input').forEach(i => {
+    if (i.type === 'radio') i.checked = false; else i.value = '';
+  });
+  document.getElementById('vCondNote').value = '';
+  // 送信後は留まる（closeWindowは呼ばない）
+});
+
+/*********************************************************************
+ * 完了報告
+ *********************************************************************/
+document.getElementById('btnCompletionSubmit').addEventListener('click', async () => {
+  const text = document.getElementById('completionText').value.trim();
+  if (!text) return showAlert('error', '総括を入力してください');
+  const btn = document.getElementById('btnCompletionSubmit');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost({ action: 'completion', userId, reportText: text });
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', '送信しました');
+  document.getElementById('completionText').value = '';
+  // 送信後は留まる（closeWindowは呼ばない）
+});
+
+/*********************************************************************
+ * 社内情報（特別処理なし: 静的リンクのみ）
+ *********************************************************************/
+// 将来の動的お知らせ取得を想定した受け口
+async function loadInfo() {
+  // const res = await apiPost({ action: 'info', userId });
+  // if (res.ok && Array.isArray(res.notices) && res.notices.length) {
+  //   document.getElementById('noticeArea').textContent = res.notices.join('\n');
+  // }
+}
+
+/*********************************************************************
+ * LIFF 初期化
+ *********************************************************************/
+// 安全装置: LIFF初期化が完了しなくても5秒後にローディングを必ず消す
+setTimeout(() => showLoading(false), 5000);
+
+(async function initLiff() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) {
+      // LINEアプリ内でのみlogin()を呼ぶ。通常ブラウザではaccess.line.me非対応の環境を考慮しデバッグモード
+      if (liff.isInClient && liff.isInClient()) {
+        liff.login();
+        return;
+      }
+      userId = 'DEBUG_USER';
+      displayName = 'デバッグユーザー（ブラウザ）';
+      document.getElementById('userName').textContent = displayName;
+      return;
+    }
+    const profile = await liff.getProfile();
+    userId = profile.userId;
+    displayName = profile.displayName;
+    document.getElementById('userName').textContent = displayName + ' さん';
+  } catch (e) {
+    // LIFF外でもデバッグできるようにフォールバック
+    userId = 'DEBUG_USER';
+    displayName = 'デバッグユーザー';
+    document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
+    console.warn('LIFF init failed:', e);
+  } finally {
+    showLoading(false);
+  }
+})();
+</script>
+
+</body>
+</html>
