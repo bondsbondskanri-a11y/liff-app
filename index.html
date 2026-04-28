@@ -26,6 +26,21 @@
   </div>
 </div>
 
+<!-- 確認モーダル -->
+<div id="confirmModal" class="loading-mask" style="display:none">
+  <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[85vh] flex flex-col">
+    <div class="p-4 border-b">
+      <h3 class="font-bold text-lg">送信内容の確認</h3>
+      <p class="text-xs text-gray-500 mt-1">この内容で間違いないでしょうか？</p>
+    </div>
+    <div id="confirmBody" class="p-4 overflow-y-auto text-sm space-y-1 flex-1"></div>
+    <div class="p-4 border-t flex gap-2">
+      <button id="btnConfirmCancel" class="flex-1 py-2 border rounded text-gray-700">キャンセル</button>
+      <button id="btnConfirmOk" class="flex-1 py-2 bg-green-600 text-white font-bold rounded">送信する</button>
+    </div>
+  </div>
+</div>
+
 <header class="bg-green-600 text-white p-4 shadow">
   <h1 class="text-lg font-bold">社内LIFFアプリ</h1>
   <p id="userName" class="text-xs opacity-90 mt-1">ユーザー情報取得中...</p>
@@ -637,6 +652,33 @@ document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.addEvent
   const v = document.querySelector('input[name="cmpHasReceipt"]:checked')?.value;
   block.classList.toggle('hidden-section', v !== '有');
 }));
+// 確認モーダル制御
+function showConfirmModal(rows, onOk) {
+  const body = document.getElementById('confirmBody');
+  body.innerHTML = '';
+  rows.forEach(([k, v]) => {
+    const div = document.createElement('div');
+    div.className = 'flex border-b py-1';
+    const key = document.createElement('div');
+    key.className = 'w-32 text-gray-600 flex-shrink-0';
+    key.textContent = k;
+    const val = document.createElement('div');
+    val.className = 'flex-1 break-words';
+    val.textContent = v || '(なし)';
+    div.appendChild(key); div.appendChild(val);
+    body.appendChild(div);
+  });
+  document.getElementById('confirmModal').style.display = 'flex';
+  const okBtn = document.getElementById('btnConfirmOk');
+  const cancelBtn = document.getElementById('btnConfirmCancel');
+  const cleanup = () => {
+    document.getElementById('confirmModal').style.display = 'none';
+    okBtn.onclick = null; cancelBtn.onclick = null;
+  };
+  okBtn.onclick = () => { cleanup(); onOk(); };
+  cancelBtn.onclick = cleanup;
+}
+
 document.getElementById('btnCompletionSubmit').addEventListener('click', async () => {
   const date = document.getElementById('cmpDate').value;
   const caseNumber = document.getElementById('cmpCaseNumber').value;
@@ -659,43 +701,70 @@ document.getElementById('btnCompletionSubmit').addEventListener('click', async (
   if (!delivery) return showAlert('error', '納品完了時刻を入力してください');
   if (!hasReceipt) return showAlert('error', '受領書有無を選択してください');
 
-  const btn = document.getElementById('btnCompletionSubmit');
-  try {
-    btn.disabled = true; showLoading(true);
-    const expHighwayPhotos = await fileArrayToDataUrls('cmpExpHighwayPhotos');
-    const expParkingPhotos = await fileArrayToDataUrls('cmpExpParkingPhotos');
-    const expOtherPhotos = await fileArrayToDataUrls('cmpExpOtherPhotos');
-    const receiptPhotos = hasReceipt === '有' ? await fileArrayToDataUrls('cmpReceiptPhotos') : [];
-    const res = await apiPost({
-      action: 'completion', userId,
-      deliveryDate: date, caseNumber, caseName,
-      pickupTime: pickup, deliveryTime: delivery,
-      distance: Number(distance) || 0,
-      expHighway: Number(expHighway) || 0, expHighwayPhotos,
-      expParking: Number(expParking) || 0, expParkingPhotos,
-      expOther: Number(expOther) || 0, expOtherPhotos,
-      note,
-      deliveryCount: Number(deliveryCount) || 0,
-      codAmount: Number(codAmount) || 0,
-      hasReceipt, receiptPhotos
-    });
-    showLoading(false); btn.disabled = false;
-    if (!res.ok) return showAlert('error', res.error || '送信失敗');
-    showAlert('ok', '送信しました');
-    // Reset
-    ['cmpDistance','cmpExpHighway','cmpExpParking','cmpExpOther','cmpDeliveryCount','cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
-    ['cmpPickupTime','cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
-    ['cmpCaseNumber','cmpCaseName'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('cmpNote').value = '';
-    ['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
-      document.getElementById(id).value = '';
-      const cnt = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
-      document.getElementById(cnt).textContent = '';
-    });
-    document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
-    document.getElementById('cmpReceiptPhotoBlock').classList.add('hidden-section');
-    document.getElementById('cmpDate').valueAsDate = new Date();
-  } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+  // 写真枚数取得
+  const cnt = id => (document.getElementById(id).files || []).length;
+  const hPhotos = cnt('cmpExpHighwayPhotos');
+  const pPhotos = cnt('cmpExpParkingPhotos');
+  const oPhotos = cnt('cmpExpOtherPhotos');
+  const rPhotos = hasReceipt === '有' ? cnt('cmpReceiptPhotos') : 0;
+
+  // 確認内容を作成
+  const summary = [
+    ['氏名', displayName],
+    ['配送日付', date],
+    ['案件番号', caseNumber],
+    ['配送案件名', caseName],
+    ['集荷完了時刻', pickup],
+    ['納品完了時刻', delivery],
+    ['距離 (km)', distance],
+    ['立替（高速代）', `${expHighway} 円 / 写真${hPhotos}枚`],
+    ['立替（駐車場代）', `${expParking} 円 / 写真${pPhotos}枚`],
+    ['立替（その他）', `${expOther} 円 / 写真${oPhotos}枚`],
+    ['備考', note || '(なし)'],
+    ['配送件数', deliveryCount],
+    ['代引き金額', `${codAmount} 円`],
+    ['受領書有無', hasReceipt + (hasReceipt === '有' ? ` / 写真${rPhotos}枚` : '')]
+  ];
+
+  showConfirmModal(summary, async () => {
+    const btn = document.getElementById('btnCompletionSubmit');
+    try {
+      btn.disabled = true; showLoading(true);
+      const expHighwayPhotos = await fileArrayToDataUrls('cmpExpHighwayPhotos');
+      const expParkingPhotos = await fileArrayToDataUrls('cmpExpParkingPhotos');
+      const expOtherPhotos = await fileArrayToDataUrls('cmpExpOtherPhotos');
+      const receiptPhotos = hasReceipt === '有' ? await fileArrayToDataUrls('cmpReceiptPhotos') : [];
+      const res = await apiPost({
+        action: 'completion', userId,
+        deliveryDate: date, caseNumber, caseName,
+        pickupTime: pickup, deliveryTime: delivery,
+        distance: Number(distance) || 0,
+        expHighway: Number(expHighway) || 0, expHighwayPhotos,
+        expParking: Number(expParking) || 0, expParkingPhotos,
+        expOther: Number(expOther) || 0, expOtherPhotos,
+        note,
+        deliveryCount: Number(deliveryCount) || 0,
+        codAmount: Number(codAmount) || 0,
+        hasReceipt, receiptPhotos
+      });
+      showLoading(false); btn.disabled = false;
+      if (!res.ok) return showAlert('error', res.error || '送信失敗');
+      showAlert('ok', '送信しました');
+      // Reset
+      ['cmpDistance','cmpExpHighway','cmpExpParking','cmpExpOther','cmpDeliveryCount','cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
+      ['cmpPickupTime','cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
+      ['cmpCaseNumber','cmpCaseName'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('cmpNote').value = '';
+      ['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
+        document.getElementById(id).value = '';
+        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
+        document.getElementById(c).textContent = '';
+      });
+      document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
+      document.getElementById('cmpReceiptPhotoBlock').classList.add('hidden-section');
+      document.getElementById('cmpDate').valueAsDate = new Date();
+    } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+  });
 });
 
 setTimeout(() => showLoading(false), 5000);
@@ -722,6 +791,73 @@ setTimeout(() => showLoading(false), 5000);
     showLoading(false);
     // Default cmpDate to today
     try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch(_){}
+  }
+})();
+</script>
+</body>
+</html>
+' ? await fileArrayToDataUrls('cmpReceiptPhotos') : [];
+      const res = await apiPost({
+        action: 'completion', userId,
+        deliveryDate: date, caseNumber, caseName,
+        pickupTime: pickup, deliveryTime: delivery,
+        distance: Number(distance) || 0,
+        expHighway: Number(expHighway) || 0, expHighwayPhotos,
+        expParking: Number(expParking) || 0, expParkingPhotos,
+        expOther: Number(expOther) || 0, expOtherPhotos,
+        note,
+        deliveryCount: Number(deliveryCount) || 0,
+        codAmount: Number(codAmount) || 0,
+        hasReceipt, receiptPhotos
+      });
+      showLoading(false); btn.disabled = false;
+      if (!res.ok) return showAlert('error', res.error || '送信失敗');
+      showAlert('ok', '送信しました');
+      ['cmpDistance','cmpExpHighway','cmpExpParking','cmpExpOther','cmpDeliveryCount','cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
+      ['cmpPickupTime','cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
+      ['cmpCaseNumber','cmpCaseName'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('cmpNote').value = '';
+      ['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
+        document.getElementById(id).value = '';
+        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
+        document.getElementById(c).textContent = '';
+      });
+      document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
+      document.getElementById('cmpReceiptPhotoBlock').classList.add('hidden-section');
+      document.getElementById('cmpDate').valueAsDate = new Date();
+    } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+  });
+});
+
+setTimeout(() => showLoading(false), 5000);
+(async function initLiff() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) {
+      if (liff.isInClient && liff.isInClient()) { liff.login(); return; }
+      userId = 'DEBUG_USER';
+      displayName = 'デバッグユーザー（ブラウザ）';
+      document.getElementById('userName').textContent = displayName;
+      return;
+    }
+    const profile = await liff.getProfile();
+    userId = profile.userId;
+    displayName = profile.displayName;
+    document.getElementById('userName').textContent = displayName + ' さん';
+  } catch (e) {
+    userId = 'DEBUG_USER';
+    displayName = 'デバッグユーザー';
+    document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
+    console.warn('LIFF init failed:', e);
+  } finally {
+    showLoading(false);
+    try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch(_){}
+  }
+})();
+</script>
+</body>
+</html>
+catch(_){}
   }
 })();
 </script>
