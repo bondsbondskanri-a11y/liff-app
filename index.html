@@ -10,10 +10,7 @@
   body { padding-bottom: 80px; }
   .tab-btn.active { color:#16a34a; font-weight:700; }
   .hidden-section { display:none; }
-  .loading-mask {
-    position:fixed; inset:0; background:rgba(255,255,255,0.7);
-    display:flex; align-items:center; justify-content:center; z-index:9999;
-  }
+  .loading-mask { position:fixed; inset:0; background:rgba(255,255,255,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; }
   .vsec-btn.active, .vsub-btn.active, .mst-btn.active { background:#dcfce7; border-color:#16a34a; color:#15803d; font-weight:600; }
 </style>
 </head>
@@ -26,14 +23,13 @@
   </div>
 </div>
 
-<!-- 確認モーダル -->
 <div id="confirmModal" class="loading-mask" style="display:none">
   <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[85vh] flex flex-col">
     <div class="p-4 border-b">
       <h3 class="font-bold text-lg">送信内容の確認</h3>
       <p class="text-xs text-gray-500 mt-1">この内容で間違いないでしょうか？</p>
     </div>
-    <div id="confirmBody" class="p-4 overflow-y-auto text-sm space-y-1 flex-1"></div>
+    <div id="confirmBody" class="p-4 overflow-y-auto text-sm flex-1"></div>
     <div class="p-4 border-t flex gap-2">
       <button id="btnConfirmCancel" class="flex-1 py-2 border rounded text-gray-700">キャンセル</button>
       <button id="btnConfirmOk" class="flex-1 py-2 bg-green-600 text-white font-bold rounded">送信する</button>
@@ -49,14 +45,13 @@
 <main class="p-4">
   <div id="alert" class="hidden rounded p-3 mb-4 text-sm"></div>
 
-  <!-- 出退勤 -->
   <section id="tab-attendance" class="section">
     <h2 class="text-lg font-bold mb-3">出退勤</h2>
     <div class="bg-white rounded shadow p-4 space-y-4">
       <div>
         <label class="block text-sm font-semibold mb-2">区分</label>
         <div class="flex gap-2">
-          <button type="button" data-att-type="in"  class="att-type-btn flex-1 py-2 rounded border">出勤</button>
+          <button type="button" data-att-type="in" class="att-type-btn flex-1 py-2 rounded border">出勤</button>
           <button type="button" data-att-type="out" class="att-type-btn flex-1 py-2 rounded border">退勤</button>
         </div>
       </div>
@@ -73,14 +68,10 @@
     </div>
   </section>
 
-  <!-- 業務報告 -->
   <section id="tab-business" class="section hidden-section">
     <h2 class="text-lg font-bold mb-3">業務報告</h2>
     <div id="bizIdle" class="bg-white rounded shadow p-4 space-y-4">
-      <div>
-        <label class="block text-sm font-semibold mb-2">業務区分</label>
-        <div id="bizTypeButtons" class="grid grid-cols-2 gap-2"></div>
-      </div>
+      <div><label class="block text-sm font-semibold mb-2">業務区分</label><div id="bizTypeButtons" class="grid grid-cols-2 gap-2"></div></div>
       <div>
         <label class="block text-sm font-semibold mb-2">位置情報</label>
         <button type="button" id="btnBizStartGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
@@ -89,9 +80,7 @@
       <button type="button" id="btnBizStart" class="w-full py-3 bg-green-600 text-white font-bold rounded">業務開始</button>
     </div>
     <div id="bizActive" class="bg-white rounded shadow p-4 space-y-4 hidden-section">
-      <div class="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-sm">
-        <strong>進行中：</strong><span id="bizActiveType"></span>
-      </div>
+      <div class="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-sm"><strong>進行中：</strong><span id="bizActiveType"></span></div>
       <div class="grid grid-cols-2 gap-2">
         <button type="button" id="btnBizDropoffMode" class="py-2 rounded border">立ち寄り</button>
         <button type="button" id="btnBizEndMode" class="py-2 rounded border">終了</button>
@@ -111,12 +100,11 @@
     </div>
   </section>
 
-  <!-- 各種情報管理 -->
   <section id="tab-vehicle" class="section hidden-section">
     <h2 class="text-lg font-bold mb-3">各種情報管理</h2>
     <div class="bg-white rounded shadow p-2 mb-3">
       <div class="grid grid-cols-2 gap-2">
-        <button type="button" data-vsec="op"  class="vsec-btn active py-2 rounded border">業務操作</button>
+        <button type="button" data-vsec="op" class="vsec-btn active py-2 rounded border">業務操作</button>
         <button type="button" data-vsec="mst" class="vsec-btn py-2 rounded border">マスター登録</button>
       </div>
     </div>
@@ -124,17 +112,15 @@
       <div class="bg-white rounded shadow p-4 space-y-4">
         <div>
           <label class="block text-sm font-semibold mb-2">車両選択</label>
-          <select id="vehicleSelect" class="w-full border rounded p-2">
-            <option value="">-- 車両を選択 --</option>
-          </select>
+          <select id="vehicleSelect" class="w-full border rounded p-2"><option value="">-- 車両を選択 --</option></select>
         </div>
         <div>
           <label class="block text-sm font-semibold mb-2">項目</label>
           <div class="grid grid-cols-2 gap-2">
             <button type="button" data-vsub="condition" class="vsub-btn py-2 rounded border">車両状態</button>
-            <button type="button" data-vsub="refuel"    class="vsub-btn py-2 rounded border">給油</button>
-            <button type="button" data-vsub="oil"       class="vsub-btn py-2 rounded border">オイル交換</button>
-            <button type="button" data-vsub="photo"     class="vsub-btn py-2 rounded border">車両写真</button>
+            <button type="button" data-vsub="refuel" class="vsub-btn py-2 rounded border">給油</button>
+            <button type="button" data-vsub="oil" class="vsub-btn py-2 rounded border">オイル交換</button>
+            <button type="button" data-vsub="photo" class="vsub-btn py-2 rounded border">車両写真</button>
           </div>
         </div>
         <div id="vForm-refuel" class="vForm hidden-section space-y-3">
@@ -153,7 +139,7 @@
               <label class="flex-1 border rounded p-2 text-center cursor-pointer"><input type="radio" name="vCondAbn" value="yes" class="mr-1"> 異常あり</label>
             </div>
           </div>
-          <div><label class="block text-sm font-semibold mb-1">備考</label><textarea id="vCondNote" rows="3" class="w-full border rounded p-2" placeholder="異常時の詳細・気づいた点など"></textarea></div>
+          <div><label class="block text-sm font-semibold mb-1">備考</label><textarea id="vCondNote" rows="3" class="w-full border rounded p-2"></textarea></div>
           <div><label class="block text-sm font-semibold mb-1">車両写真（任意）</label><input type="file" id="vCondPhoto" accept="image/*" capture="environment" class="w-full text-sm"></div>
         </div>
         <div id="vForm-photo" class="vForm hidden-section space-y-3">
@@ -170,24 +156,24 @@
       <div class="bg-white rounded shadow p-2 mb-3">
         <div class="grid grid-cols-2 gap-2">
           <button type="button" data-mst="employee" class="mst-btn py-2 rounded border">免許証登録</button>
-          <button type="button" data-mst="vehicle"  class="mst-btn py-2 rounded border">車両登録</button>
+          <button type="button" data-mst="vehicle" class="mst-btn py-2 rounded border">車両登録</button>
         </div>
       </div>
       <div id="mstForm-employee" class="mstForm hidden-section bg-white rounded shadow p-4 space-y-4">
         <p class="text-xs text-gray-500">あなた自身を社員マスターに新規登録します</p>
-        <div><label class="block text-sm font-semibold mb-1">氏名 <span class="text-red-500">*</span></label><input type="text" id="mstEmpName" class="w-full border rounded p-2" placeholder="例: 渋井拓也"></div>
-        <div><label class="block text-sm font-semibold mb-1">担当車両番号（任意）</label><input type="text" id="mstEmpVehicleId" class="w-full border rounded p-2" placeholder="例: 大宮480れ211"></div>
-        <div><label class="block text-sm font-semibold mb-1">免許証番号 <span class="text-red-500">*</span></label><input type="text" id="mstEmpLicNo" class="w-full border rounded p-2" placeholder="例: 12345678901234"></div>
+        <div><label class="block text-sm font-semibold mb-1">氏名 <span class="text-red-500">*</span></label><input type="text" id="mstEmpName" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">担当車両番号（任意）</label><input type="text" id="mstEmpVehicleId" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">免許証番号 <span class="text-red-500">*</span></label><input type="text" id="mstEmpLicNo" class="w-full border rounded p-2"></div>
         <div><label class="block text-sm font-semibold mb-1">免許有効期限 <span class="text-red-500">*</span></label><input type="date" id="mstEmpLicExp" class="w-full border rounded p-2"></div>
         <div><label class="block text-sm font-semibold mb-1">免許証写真（任意）</label><input type="file" id="mstEmpPhoto" accept="image/*" capture="environment" class="w-full text-sm"></div>
         <button type="button" id="btnMstEmpSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">登録</button>
       </div>
       <div id="mstForm-vehicle" class="mstForm hidden-section bg-white rounded shadow p-4 space-y-4">
         <p class="text-xs text-gray-500">新しい車両を車両マスターに登録します</p>
-        <div><label class="block text-sm font-semibold mb-1">車両番号 <span class="text-red-500">*</span></label><input type="text" id="mstVehNo" class="w-full border rounded p-2" placeholder="例: 大宮480れ211"></div>
-        <div><label class="block text-sm font-semibold mb-1">車種（任意）</label><input type="text" id="mstVehType" class="w-full border rounded p-2" placeholder="例: エブリィ"></div>
+        <div><label class="block text-sm font-semibold mb-1">車両番号 <span class="text-red-500">*</span></label><input type="text" id="mstVehNo" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">車種（任意）</label><input type="text" id="mstVehType" class="w-full border rounded p-2"></div>
         <div><label class="block text-sm font-semibold mb-1">車検有効期限（任意）</label><input type="date" id="mstVehExpiry" class="w-full border rounded p-2"></div>
-        <p class="text-xs text-gray-600 mt-2">車両写真（任意・前/後/右前/左後）</p>
+        <p class="text-xs text-gray-600 mt-2">車両写真（任意）</p>
         <div><label class="block text-sm font-semibold mb-1">前面</label><input type="file" id="mstVehPhotoFront" accept="image/*" capture="environment" class="w-full text-sm"></div>
         <div><label class="block text-sm font-semibold mb-1">背面</label><input type="file" id="mstVehPhotoBack" accept="image/*" capture="environment" class="w-full text-sm"></div>
         <div><label class="block text-sm font-semibold mb-1">右前</label><input type="file" id="mstVehPhotoFrontRight" accept="image/*" capture="environment" class="w-full text-sm"></div>
@@ -197,7 +183,6 @@
     </div>
   </section>
 
-  <!-- 完了報告（拡張版） -->
   <section id="tab-completion" class="section hidden-section">
     <h2 class="text-lg font-bold mb-3">完了報告</h2>
     <div class="bg-white rounded shadow p-4 space-y-4">
@@ -206,20 +191,16 @@
         <label class="block text-sm font-semibold mb-1">案件番号 <span class="text-red-500">*</span></label>
         <select id="cmpCaseNumber" class="w-full border rounded p-2">
           <option value="">-- 選択 --</option>
-          <option>①</option><option>②</option><option>③</option><option>④</option>
-          <option>⑤</option><option>⑥</option><option>⑦</option>
+          <option>①</option><option>②</option><option>③</option><option>④</option><option>⑤</option><option>⑥</option><option>⑦</option>
           <option>その他（定期案件や突発案件等）</option>
         </select>
-        <p class="text-xs text-gray-500 mt-1">※配車文章の番号を選択（例：①くるめし 3H便→①）</p>
       </div>
       <div>
         <label class="block text-sm font-semibold mb-1">配送案件名 <span class="text-red-500">*</span></label>
         <select id="cmpCaseName" class="w-full border rounded p-2">
           <option value="">-- 選択 --</option>
-          <option>くるめし</option>
-          <option>スタフェス（スターフェスティバル）</option>
-          <option>弁当屋各種(三田オーベルジーヌ,ソライロキッチン,バラン,坂膳、イタ飯、新開花、10ビリオン、デリシャステイク)</option>
-          <option>チャカス</option><option>アクシスPJ</option><option>福島オーツー</option>
+          <option>くるめし</option><option>スタフェス（スターフェスティバル）</option>
+          <option>弁当屋各種</option><option>チャカス</option><option>アクシスPJ</option><option>福島オーツー</option>
           <option>和納</option><option>うなぎ食堂</option><option>ロジクエスト</option>
           <option>ワールドビジョン</option><option>ハブ＆スポーク</option><option>サザキ（SZK）</option>
           <option>グラファス</option><option>A3</option><option>ワイズエクスプレス</option>
@@ -232,21 +213,9 @@
           <option>その他</option>
         </select>
       </div>
-      <div>
-        <label class="block text-sm font-semibold mb-1">集荷完了時刻 <span class="text-red-500">*</span></label>
-        <input type="number" id="cmpPickupTime" class="w-full border rounded p-2" placeholder="例: 900">
-        <p class="text-xs text-gray-500 mt-1">9:00→900、15:00→1500の形式で入力</p>
-      </div>
-      <div>
-        <label class="block text-sm font-semibold mb-1">納品完了時刻 <span class="text-red-500">*</span></label>
-        <input type="number" id="cmpDeliveryTime" class="w-full border rounded p-2" placeholder="例: 1100">
-        <p class="text-xs text-gray-500 mt-1">11:00→1100、18:00→1800の形式で入力</p>
-      </div>
-      <div>
-        <label class="block text-sm font-semibold mb-1">距離 (km) <span class="text-red-500">*</span></label>
-        <input type="number" id="cmpDistance" class="w-full border rounded p-2" value="0">
-      </div>
-
+      <div><label class="block text-sm font-semibold mb-1">集荷完了時刻 <span class="text-red-500">*</span></label><input type="number" id="cmpPickupTime" class="w-full border rounded p-2" placeholder="例: 900"><p class="text-xs text-gray-500 mt-1">9:00→900の形式</p></div>
+      <div><label class="block text-sm font-semibold mb-1">納品完了時刻 <span class="text-red-500">*</span></label><input type="number" id="cmpDeliveryTime" class="w-full border rounded p-2" placeholder="例: 1500"><p class="text-xs text-gray-500 mt-1">15:00→1500の形式</p></div>
+      <div><label class="block text-sm font-semibold mb-1">距離 (km) <span class="text-red-500">*</span></label><input type="number" id="cmpDistance" class="w-full border rounded p-2" value="0"></div>
       <div class="border-t pt-3">
         <label class="block text-sm font-semibold mb-1">立替（高速代） <span class="text-red-500">*</span></label>
         <input type="number" id="cmpExpHighway" class="w-full border rounded p-2" value="0">
@@ -254,7 +223,6 @@
         <input type="file" id="cmpExpHighwayPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
         <p id="cmpExpHighwayCount" class="text-xs text-gray-500 mt-1"></p>
       </div>
-
       <div class="border-t pt-3">
         <label class="block text-sm font-semibold mb-1">立替（駐車場代） <span class="text-red-500">*</span></label>
         <input type="number" id="cmpExpParking" class="w-full border rounded p-2" value="0">
@@ -262,7 +230,6 @@
         <input type="file" id="cmpExpParkingPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
         <p id="cmpExpParkingCount" class="text-xs text-gray-500 mt-1"></p>
       </div>
-
       <div class="border-t pt-3">
         <label class="block text-sm font-semibold mb-1">立替（その他、ボンズ指示） <span class="text-red-500">*</span></label>
         <input type="number" id="cmpExpOther" class="w-full border rounded p-2" value="0">
@@ -270,20 +237,9 @@
         <input type="file" id="cmpExpOtherPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
         <p id="cmpExpOtherCount" class="text-xs text-gray-500 mt-1"></p>
       </div>
-
-      <div class="border-t pt-3">
-        <label class="block text-sm font-semibold mb-1">備考</label>
-        <textarea id="cmpNote" rows="3" class="w-full border rounded p-2" placeholder="待機や作業が発生した場合"></textarea>
-      </div>
-      <div>
-        <label class="block text-sm font-semibold mb-1">配送件数 <span class="text-red-500">*</span></label>
-        <input type="number" id="cmpDeliveryCount" class="w-full border rounded p-2" value="0">
-      </div>
-      <div>
-        <label class="block text-sm font-semibold mb-1">代引き金額（合算） <span class="text-red-500">*</span></label>
-        <input type="number" id="cmpCodAmount" class="w-full border rounded p-2" value="0">
-      </div>
-
+      <div class="border-t pt-3"><label class="block text-sm font-semibold mb-1">備考</label><textarea id="cmpNote" rows="3" class="w-full border rounded p-2"></textarea></div>
+      <div><label class="block text-sm font-semibold mb-1">配送件数 <span class="text-red-500">*</span></label><input type="number" id="cmpDeliveryCount" class="w-full border rounded p-2" value="0"></div>
+      <div><label class="block text-sm font-semibold mb-1">代引き金額（合算） <span class="text-red-500">*</span></label><input type="number" id="cmpCodAmount" class="w-full border rounded p-2" value="0"></div>
       <div class="border-t pt-3">
         <label class="block text-sm font-semibold mb-1">受領書有無 <span class="text-red-500">*</span></label>
         <div class="flex gap-2">
@@ -296,63 +252,42 @@
           <p id="cmpReceiptPhotosCount" class="text-xs text-gray-500 mt-1"></p>
         </div>
       </div>
-
       <button type="button" id="btnCompletionSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
     </div>
   </section>
 
-  <!-- 社内情報 -->
   <section id="tab-info" class="section hidden-section">
     <h2 class="text-lg font-bold mb-3">社内情報</h2>
     <div class="bg-white rounded shadow p-4 space-y-4">
-      <div>
-        <h3 class="font-semibold text-sm mb-2">シフト管理</h3>
-        <a id="shiftLink" href="https://drive.google.com/drive/folders/0AIkRkIY2oKyBUk9PVA" target="_blank" rel="noopener" class="block w-full text-center py-3 bg-blue-500 text-white font-bold rounded">シフト管理フォルダを開く</a>
-      </div>
-      <div>
-        <h3 class="font-semibold text-sm mb-2">社内お知らせ</h3>
-        <div id="noticeArea" class="text-sm text-gray-600 border rounded p-3 bg-gray-50">お知らせはありません。</div>
-      </div>
+      <div><h3 class="font-semibold text-sm mb-2">シフト管理</h3><a href="https://drive.google.com/drive/folders/0AIkRkIY2oKyBUk9PVA" target="_blank" rel="noopener" class="block w-full text-center py-3 bg-blue-500 text-white font-bold rounded">シフト管理フォルダを開く</a></div>
+      <div><h3 class="font-semibold text-sm mb-2">社内お知らせ</h3><div class="text-sm text-gray-600 border rounded p-3 bg-gray-50">お知らせはありません。</div></div>
     </div>
   </section>
 </main>
 
 <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around shadow-lg">
   <button data-tab="attendance" class="tab-btn flex-1 py-3 text-xs active">出退勤</button>
-  <button data-tab="business"   class="tab-btn flex-1 py-3 text-xs">業務報告</button>
-  <button data-tab="vehicle"    class="tab-btn flex-1 py-3 text-xs">各種情報管理</button>
+  <button data-tab="business" class="tab-btn flex-1 py-3 text-xs">業務報告</button>
+  <button data-tab="vehicle" class="tab-btn flex-1 py-3 text-xs">各種情報管理</button>
   <button data-tab="completion" class="tab-btn flex-1 py-3 text-xs">完了報告</button>
-  <button data-tab="info"       class="tab-btn flex-1 py-3 text-xs">社内情報</button>
+  <button data-tab="info" class="tab-btn flex-1 py-3 text-xs">社内情報</button>
 </nav>
 
 <script>
-const LIFF_ID      = '2009892557-Iki3540A';
+const LIFF_ID = '2009892557-Iki3540A';
 const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwiEXWmwwhkdy8toQ_QnCHGeaxBdOZ6UqBHeyuf0WHza61E48OPGjJvYVWucoWxihBtAA/exec';
 const BUSINESS_TYPES = ['案件業務', '営業業務', '事務業務', '移動業務'];
-
-let userId = '';
-let displayName = '';
-let attType = null;
-let attGeo  = null;
-let bizStartType = null;
-let bizStartGeo  = null;
-let bizActionMode = null;
-let bizActionGeo  = null;
-let vehicleSubType = null;
-let mstMode = null;
+let userId = '', displayName = '';
+let attType = null, attGeo = null;
+let bizStartType = null, bizStartGeo = null, bizActionMode = null, bizActionGeo = null;
+let vehicleSubType = null, mstMode = null;
 
 async function apiPost(payload) {
   if (displayName && !payload.displayName) payload.displayName = displayName;
-  const res = await fetch(GAS_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload)
-  });
+  const res = await fetch(GAS_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
   const text = await res.text();
-  try { return JSON.parse(text); }
-  catch (_) { return { ok:false, error:'invalid response: '+text }; }
+  try { return JSON.parse(text); } catch (_) { return { ok: false, error: 'invalid response: ' + text }; }
 }
-
 function showLoading(b) { document.getElementById('loadingMask').style.display = b ? 'flex' : 'none'; }
 function showAlert(type, msg) {
   const el = document.getElementById('alert');
@@ -364,9 +299,7 @@ function showAlert(type, msg) {
 function getGeo() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('位置情報非対応'));
-    navigator.geolocation.getCurrentPosition(
-      p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      e => reject(e), { enableHighAccuracy: true, timeout: 10000 });
+    navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), e => reject(e), { enableHighAccuracy: true, timeout: 10000 });
   });
 }
 function fileToCompressedDataURL(file, maxWidth = 1280, quality = 0.85) {
@@ -376,8 +309,7 @@ function fileToCompressedDataURL(file, maxWidth = 1280, quality = 0.85) {
       const img = new Image();
       img.onload = () => {
         const scale = Math.min(1, maxWidth / img.width);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
@@ -403,25 +335,22 @@ async function fileArrayToDataUrls(id) {
 function switchTab(name) {
   document.querySelectorAll('.section').forEach(el => el.classList.toggle('hidden-section', el.id !== 'tab-' + name));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  if (name === 'business')   loadBusinessStatus();
-  if (name === 'vehicle')    loadVehicleList();
+  if (name === 'business') loadBusinessStatus();
+  if (name === 'vehicle') loadVehicleList();
 }
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
-// 出退勤
 document.querySelectorAll('.att-type-btn').forEach(btn => btn.addEventListener('click', () => {
   attType = btn.dataset.attType;
   document.querySelectorAll('.att-type-btn').forEach(b => b.classList.toggle('bg-green-100', b === btn));
 }));
 document.getElementById('btnAttGeo').addEventListener('click', async () => {
-  try { showLoading(true); attGeo = await getGeo();
-    document.getElementById('attGeoText').textContent = `取得済: ${attGeo.lat.toFixed(5)}, ${attGeo.lng.toFixed(5)}`;
-  } catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); }
-  finally { showLoading(false); }
+  try { showLoading(true); attGeo = await getGeo(); document.getElementById('attGeoText').textContent = '取得済'; }
+  catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); } finally { showLoading(false); }
 });
 document.getElementById('btnAttSubmit').addEventListener('click', async () => {
   if (!attType) return showAlert('error', '区分を選択してください');
-  if (!attGeo)  return showAlert('error', '位置情報を取得してください');
+  if (!attGeo) return showAlert('error', '位置情報を取得してください');
   const alc = document.getElementById('attAlcohol').value;
   if (alc === '' || isNaN(Number(alc))) return showAlert('error', 'アルコール値を入力');
   const btn = document.getElementById('btnAttSubmit');
@@ -436,8 +365,7 @@ document.getElementById('btnAttSubmit').addEventListener('click', async () => {
   document.querySelectorAll('.att-type-btn').forEach(b => b.classList.remove('bg-green-100'));
 });
 
-// 業務報告
-(function renderBizTypeBtns(){
+(function(){
   const box = document.getElementById('bizTypeButtons');
   BUSINESS_TYPES.forEach(t => {
     const b = document.createElement('button');
@@ -450,14 +378,12 @@ document.getElementById('btnAttSubmit').addEventListener('click', async () => {
   });
 })();
 document.getElementById('btnBizStartGeo').addEventListener('click', async () => {
-  try { showLoading(true); bizStartGeo = await getGeo();
-    document.getElementById('bizStartGeoText').textContent = `取得済: ${bizStartGeo.lat.toFixed(5)}, ${bizStartGeo.lng.toFixed(5)}`;
-  } catch(e){ showAlert('error','位置情報取得失敗: '+e.message); }
-  finally { showLoading(false); }
+  try { showLoading(true); bizStartGeo = await getGeo(); document.getElementById('bizStartGeoText').textContent = '取得済'; }
+  catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); } finally { showLoading(false); }
 });
 document.getElementById('btnBizStart').addEventListener('click', async () => {
   if (!bizStartType) return showAlert('error', '業務区分を選択してください');
-  if (!bizStartGeo)  return showAlert('error', '位置情報を取得してください');
+  if (!bizStartGeo) return showAlert('error', '位置情報を取得してください');
   const btn = document.getElementById('btnBizStart');
   btn.disabled = true; showLoading(true);
   const res = await apiPost({ action: 'business_report', userId, status: 'start', businessType: bizStartType, lat: bizStartGeo.lat, lng: bizStartGeo.lng });
@@ -479,14 +405,12 @@ document.getElementById('btnBizEndMode').addEventListener('click', () => {
   document.getElementById('bizEndContentBlock').classList.remove('hidden-section');
 });
 document.getElementById('btnBizActionGeo').addEventListener('click', async () => {
-  try { showLoading(true); bizActionGeo = await getGeo();
-    document.getElementById('bizActionGeoText').textContent = `取得済: ${bizActionGeo.lat.toFixed(5)}, ${bizActionGeo.lng.toFixed(5)}`;
-  } catch(e){ showAlert('error','位置情報取得失敗: '+e.message); }
-  finally { showLoading(false); }
+  try { showLoading(true); bizActionGeo = await getGeo(); document.getElementById('bizActionGeoText').textContent = '取得済'; }
+  catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); } finally { showLoading(false); }
 });
 document.getElementById('btnBizActionSubmit').addEventListener('click', async () => {
   if (!bizActionMode) return showAlert('error', '「立ち寄り」または「終了」を選択');
-  if (!bizActionGeo)  return showAlert('error', '位置情報を取得してください');
+  if (!bizActionGeo) return showAlert('error', '位置情報を取得してください');
   const payload = { action: 'business_report', userId, status: bizActionMode, lat: bizActionGeo.lat, lng: bizActionGeo.lng };
   if (bizActionMode === 'end') {
     const content = document.getElementById('bizEndContent').value.trim();
@@ -506,16 +430,11 @@ async function loadBusinessStatus() {
   showLoading(true);
   const res = await apiPost({ action: 'business_status', userId });
   showLoading(false);
-  const idle   = document.getElementById('bizIdle');
-  const active = document.getElementById('bizActive');
+  const idle = document.getElementById('bizIdle'), active = document.getElementById('bizActive');
   if (res.ok && res.status === 'in_progress') {
-    idle.classList.add('hidden-section');
-    active.classList.remove('hidden-section');
+    idle.classList.add('hidden-section'); active.classList.remove('hidden-section');
     document.getElementById('bizActiveType').textContent = res.businessType || '';
-  } else {
-    idle.classList.remove('hidden-section');
-    active.classList.add('hidden-section');
-  }
+  } else { idle.classList.remove('hidden-section'); active.classList.add('hidden-section'); }
   bizActionMode = null; bizActionGeo = null;
   document.getElementById('bizActionGeoText').textContent = '未取得';
   document.getElementById('bizEndContent').value = '';
@@ -524,7 +443,6 @@ async function loadBusinessStatus() {
   document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
 }
 
-// 各種情報管理
 document.querySelectorAll('.vsec-btn').forEach(btn => btn.addEventListener('click', () => {
   const sec = btn.dataset.vsec;
   document.querySelectorAll('.vsec-btn').forEach(b => b.classList.toggle('active', b === btn));
@@ -547,25 +465,23 @@ document.querySelectorAll('.vsub-btn').forEach(btn => btn.addEventListener('clic
 }));
 document.getElementById('btnVehicleSubmit').addEventListener('click', async () => {
   const vehicleId = document.getElementById('vehicleSelect').value;
-  if (!vehicleId)      return showAlert('error', '車両を選択してください');
+  if (!vehicleId) return showAlert('error', '車両を選択してください');
   if (!vehicleSubType) return showAlert('error', '項目を選択してください');
   const payload = { action: 'vehicle', userId, subType: vehicleSubType, vehicleId };
   const btn = document.getElementById('btnVehicleSubmit');
   try {
     btn.disabled = true; showLoading(true);
     if (vehicleSubType === 'refuel') {
-      const liter = document.getElementById('vRefuelLiter').value;
-      const amount = document.getElementById('vRefuelAmount').value;
-      const odo = document.getElementById('vRefuelOdo').value;
-      if (liter === '' || amount === '' || odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '給油量・金額・走行距離を入力してください'); }
+      const liter = document.getElementById('vRefuelLiter').value, amount = document.getElementById('vRefuelAmount').value, odo = document.getElementById('vRefuelOdo').value;
+      if (liter === '' || amount === '' || odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '給油量・金額・走行距離を入力'); }
       payload.liter = Number(liter); payload.amount = Number(amount); payload.odo = Number(odo);
     } else if (vehicleSubType === 'oil') {
       const odo = document.getElementById('vOilOdo').value;
-      if (odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '走行距離を入力してください'); }
+      if (odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '走行距離を入力'); }
       payload.odo = Number(odo);
     } else if (vehicleSubType === 'condition') {
       const sel = document.querySelector('input[name="vCondAbn"]:checked');
-      if (!sel) { showLoading(false); btn.disabled = false; return showAlert('error', '異常有無を選択してください'); }
+      if (!sel) { showLoading(false); btn.disabled = false; return showAlert('error', '異常有無を選択'); }
       payload.abnormal = sel.value;
       payload.note = document.getElementById('vCondNote').value.trim();
       payload.photo = await fileInputToDataURL('vCondPhoto');
@@ -575,8 +491,7 @@ document.getElementById('btnVehicleSubmit').addEventListener('click', async () =
       payload.photoFrontRight = await fileInputToDataURL('vPhotoFrontRight');
       payload.photoBackLeft = await fileInputToDataURL('vPhotoBackLeft');
       if (!payload.photoFront && !payload.photoBack && !payload.photoFrontRight && !payload.photoBackLeft) {
-        showLoading(false); btn.disabled = false;
-        return showAlert('error', '少なくとも1枚は写真を選択してください');
+        showLoading(false); btn.disabled = false; return showAlert('error', '少なくとも1枚は写真を選択');
       }
     }
     const res = await apiPost(payload);
@@ -585,13 +500,9 @@ document.getElementById('btnVehicleSubmit').addEventListener('click', async () =
     showAlert('ok', '送信しました');
     document.querySelectorAll('#vSec-op input').forEach(i => { if (i.type === 'radio') i.checked = false; else i.value = ''; });
     document.getElementById('vCondNote').value = '';
-  } catch (e) {
-    showLoading(false); btn.disabled = false;
-    showAlert('error', '処理失敗: ' + e.message);
-  }
+  } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
 });
 
-// マスター登録
 document.querySelectorAll('.mst-btn').forEach(btn => btn.addEventListener('click', () => {
   mstMode = btn.dataset.mst;
   document.querySelectorAll('.mst-btn').forEach(b => b.classList.toggle('active', b === btn));
@@ -602,9 +513,9 @@ document.getElementById('btnMstEmpSubmit').addEventListener('click', async () =>
   const licNo = document.getElementById('mstEmpLicNo').value.trim();
   const licExp = document.getElementById('mstEmpLicExp').value.trim();
   const vehicleId = document.getElementById('mstEmpVehicleId').value.trim();
-  if (!name) return showAlert('error', '氏名を入力してください');
-  if (!licNo) return showAlert('error', '免許証番号を入力してください');
-  if (!licExp) return showAlert('error', '免許有効期限を選択してください');
+  if (!name) return showAlert('error', '氏名を入力');
+  if (!licNo) return showAlert('error', '免許証番号を入力');
+  if (!licExp) return showAlert('error', '免許有効期限を選択');
   const btn = document.getElementById('btnMstEmpSubmit');
   try {
     btn.disabled = true; showLoading(true);
@@ -620,7 +531,7 @@ document.getElementById('btnMstVehSubmit').addEventListener('click', async () =>
   const vehicleNo = document.getElementById('mstVehNo').value.trim();
   const vehicleType = document.getElementById('mstVehType').value.trim();
   const expiry = document.getElementById('mstVehExpiry').value.trim();
-  if (!vehicleNo) return showAlert('error', '車両番号を入力してください');
+  if (!vehicleNo) return showAlert('error', '車両番号を入力');
   const btn = document.getElementById('btnMstVehSubmit');
   try {
     btn.disabled = true; showLoading(true);
@@ -638,21 +549,19 @@ document.getElementById('btnMstVehSubmit').addEventListener('click', async () =>
   } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
 });
 
-// 完了報告（拡張版）
-['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
-  const cnt = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
+['cmpExpHighwayPhotos', 'cmpExpParkingPhotos', 'cmpExpOtherPhotos', 'cmpReceiptPhotos'].forEach(id => {
+  const cnt = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos', 'Count');
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => {
     const n = el.files.length;
-    document.getElementById(cnt).textContent = n > 0 ? `${n}枚 選択中` : '';
+    document.getElementById(cnt).textContent = n > 0 ? n + '枚 選択中' : '';
   });
 });
 document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.addEventListener('change', () => {
-  const block = document.getElementById('cmpReceiptPhotoBlock');
   const v = document.querySelector('input[name="cmpHasReceipt"]:checked')?.value;
-  block.classList.toggle('hidden-section', v !== '有');
+  document.getElementById('cmpReceiptPhotoBlock').classList.toggle('hidden-section', v !== '有');
 }));
-// 確認モーダル制御
+
 function showConfirmModal(rows, onOk) {
   const body = document.getElementById('confirmBody');
   body.innerHTML = '';
@@ -664,7 +573,7 @@ function showConfirmModal(rows, onOk) {
     key.textContent = k;
     const val = document.createElement('div');
     val.className = 'flex-1 break-words';
-    val.textContent = v || '(なし)';
+    val.textContent = (v === '' || v == null) ? '(なし)' : v;
     div.appendChild(key); div.appendChild(val);
     body.appendChild(div);
   });
@@ -693,22 +602,15 @@ document.getElementById('btnCompletionSubmit').addEventListener('click', async (
   const deliveryCount = document.getElementById('cmpDeliveryCount').value;
   const codAmount = document.getElementById('cmpCodAmount').value;
   const hasReceipt = document.querySelector('input[name="cmpHasReceipt"]:checked')?.value;
-
-  if (!date) return showAlert('error', '配送日付を選択してください');
-  if (!caseNumber) return showAlert('error', '案件番号を選択してください');
-  if (!caseName) return showAlert('error', '配送案件名を選択してください');
-  if (!pickup) return showAlert('error', '集荷完了時刻を入力してください');
-  if (!delivery) return showAlert('error', '納品完了時刻を入力してください');
-  if (!hasReceipt) return showAlert('error', '受領書有無を選択してください');
-
-  // 写真枚数取得
+  if (!date) return showAlert('error', '配送日付を選択');
+  if (!caseNumber) return showAlert('error', '案件番号を選択');
+  if (!caseName) return showAlert('error', '配送案件名を選択');
+  if (!pickup) return showAlert('error', '集荷完了時刻を入力');
+  if (!delivery) return showAlert('error', '納品完了時刻を入力');
+  if (!hasReceipt) return showAlert('error', '受領書有無を選択');
   const cnt = id => (document.getElementById(id).files || []).length;
-  const hPhotos = cnt('cmpExpHighwayPhotos');
-  const pPhotos = cnt('cmpExpParkingPhotos');
-  const oPhotos = cnt('cmpExpOtherPhotos');
+  const hPhotos = cnt('cmpExpHighwayPhotos'), pPhotos = cnt('cmpExpParkingPhotos'), oPhotos = cnt('cmpExpOtherPhotos');
   const rPhotos = hasReceipt === '有' ? cnt('cmpReceiptPhotos') : 0;
-
-  // 確認内容を作成
   const summary = [
     ['氏名', displayName],
     ['配送日付', date],
@@ -717,15 +619,14 @@ document.getElementById('btnCompletionSubmit').addEventListener('click', async (
     ['集荷完了時刻', pickup],
     ['納品完了時刻', delivery],
     ['距離 (km)', distance],
-    ['立替（高速代）', `${expHighway} 円 / 写真${hPhotos}枚`],
-    ['立替（駐車場代）', `${expParking} 円 / 写真${pPhotos}枚`],
-    ['立替（その他）', `${expOther} 円 / 写真${oPhotos}枚`],
+    ['立替（高速代）', expHighway + ' 円 / 写真' + hPhotos + '枚'],
+    ['立替（駐車場代）', expParking + ' 円 / 写真' + pPhotos + '枚'],
+    ['立替（その他）', expOther + ' 円 / 写真' + oPhotos + '枚'],
     ['備考', note || '(なし)'],
     ['配送件数', deliveryCount],
-    ['代引き金額', `${codAmount} 円`],
-    ['受領書有無', hasReceipt + (hasReceipt === '有' ? ` / 写真${rPhotos}枚` : '')]
+    ['代引き金額', codAmount + ' 円'],
+    ['受領書有無', hasReceipt + (hasReceipt === '有' ? ' / 写真' + rPhotos + '枚' : '')]
   ];
-
   showConfirmModal(summary, async () => {
     const btn = document.getElementById('btnCompletionSubmit');
     try {
@@ -750,14 +651,13 @@ document.getElementById('btnCompletionSubmit').addEventListener('click', async (
       showLoading(false); btn.disabled = false;
       if (!res.ok) return showAlert('error', res.error || '送信失敗');
       showAlert('ok', '送信しました');
-      // Reset
-      ['cmpDistance','cmpExpHighway','cmpExpParking','cmpExpOther','cmpDeliveryCount','cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
-      ['cmpPickupTime','cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
-      ['cmpCaseNumber','cmpCaseName'].forEach(id => document.getElementById(id).value = '');
+      ['cmpDistance', 'cmpExpHighway', 'cmpExpParking', 'cmpExpOther', 'cmpDeliveryCount', 'cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
+      ['cmpPickupTime', 'cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
+      ['cmpCaseNumber', 'cmpCaseName'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('cmpNote').value = '';
-      ['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
+      ['cmpExpHighwayPhotos', 'cmpExpParkingPhotos', 'cmpExpOtherPhotos', 'cmpReceiptPhotos'].forEach(id => {
         document.getElementById(id).value = '';
-        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
+        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos', 'Count');
         document.getElementById(c).textContent = '';
       });
       document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
@@ -789,75 +689,7 @@ setTimeout(() => showLoading(false), 5000);
     console.warn('LIFF init failed:', e);
   } finally {
     showLoading(false);
-    // Default cmpDate to today
-    try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch(_){}
-  }
-})();
-</script>
-</body>
-</html>
-' ? await fileArrayToDataUrls('cmpReceiptPhotos') : [];
-      const res = await apiPost({
-        action: 'completion', userId,
-        deliveryDate: date, caseNumber, caseName,
-        pickupTime: pickup, deliveryTime: delivery,
-        distance: Number(distance) || 0,
-        expHighway: Number(expHighway) || 0, expHighwayPhotos,
-        expParking: Number(expParking) || 0, expParkingPhotos,
-        expOther: Number(expOther) || 0, expOtherPhotos,
-        note,
-        deliveryCount: Number(deliveryCount) || 0,
-        codAmount: Number(codAmount) || 0,
-        hasReceipt, receiptPhotos
-      });
-      showLoading(false); btn.disabled = false;
-      if (!res.ok) return showAlert('error', res.error || '送信失敗');
-      showAlert('ok', '送信しました');
-      ['cmpDistance','cmpExpHighway','cmpExpParking','cmpExpOther','cmpDeliveryCount','cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
-      ['cmpPickupTime','cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
-      ['cmpCaseNumber','cmpCaseName'].forEach(id => document.getElementById(id).value = '');
-      document.getElementById('cmpNote').value = '';
-      ['cmpExpHighwayPhotos','cmpExpParkingPhotos','cmpExpOtherPhotos','cmpReceiptPhotos'].forEach(id => {
-        document.getElementById(id).value = '';
-        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos','Count');
-        document.getElementById(c).textContent = '';
-      });
-      document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
-      document.getElementById('cmpReceiptPhotoBlock').classList.add('hidden-section');
-      document.getElementById('cmpDate').valueAsDate = new Date();
-    } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
-  });
-});
-
-setTimeout(() => showLoading(false), 5000);
-(async function initLiff() {
-  try {
-    await liff.init({ liffId: LIFF_ID });
-    if (!liff.isLoggedIn()) {
-      if (liff.isInClient && liff.isInClient()) { liff.login(); return; }
-      userId = 'DEBUG_USER';
-      displayName = 'デバッグユーザー（ブラウザ）';
-      document.getElementById('userName').textContent = displayName;
-      return;
-    }
-    const profile = await liff.getProfile();
-    userId = profile.userId;
-    displayName = profile.displayName;
-    document.getElementById('userName').textContent = displayName + ' さん';
-  } catch (e) {
-    userId = 'DEBUG_USER';
-    displayName = 'デバッグユーザー';
-    document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
-    console.warn('LIFF init failed:', e);
-  } finally {
-    showLoading(false);
-    try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch(_){}
-  }
-})();
-</script>
-</body>
-</html>
-catch(_){}
+    try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch (_) {}
   }
 })();
 </script>
