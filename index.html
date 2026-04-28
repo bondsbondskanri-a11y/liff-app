@@ -605,9 +605,6 @@ async function loadBusinessStatus() {
   document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
 }
 
-/*********************************************************************
- * 各種情報管理 - セクション切替
- *********************************************************************/
 document.querySelectorAll('.vsec-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const sec = btn.dataset.vsec;
@@ -616,9 +613,6 @@ document.querySelectorAll('.vsec-btn').forEach(btn => {
   });
 });
 
-/*********************************************************************
- * 業務操作（車両関係）
- *********************************************************************/
 async function loadVehicleList() {
   const sel = document.getElementById('vehicleSelect');
   if (sel.options.length > 1) return;
@@ -700,304 +694,6 @@ document.getElementById('btnVehicleSubmit').addEventListener('click', async () =
   }
 });
 
-/*********************************************************************
- * マスター登録
- *********************************************************************/
-document.querySelectorAll('.mst-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    mstMode = btn.dataset.mst;
-    document.querySelectorAll('.mst-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.mstForm').forEach(f =>
-      f.classList.toggle('hidden-section', f.id !== 'mstForm-' + mstMode));
-  });
-});
-
-// 免許証登録（新規社員）
-document.getElementById('btnMstEmpSubmit').addEventListener('click', async () => {
-  const name   = document.getElementById('mstEmpName').value.trim();
-  const licNo  = document.getElementById('mstEmpLicNo').value.trim();
-  const licExp = document.getElementById('mstEmpLicExp').value.trim();
-  const vehicleId = document.getElementById('mstEmpVehicleId').value.trim();
-  if (!name)   return showAlert('error', '氏名を入力してください');
-  if (!licNo)  return showAlert('error', '免許証番号を入力してください');
-  if (!licExp) return showAlert('error', '免許有効期限を選択してください');
-
-  const btn = document.getElementById('btnMstEmpSubmit');
-  try {
-    btn.disabled = true; showLoading(true);
-    const photo = await fileInputToDataURL('mstEmpPhoto');
-    const res = await apiPost({
-      action: 'register_employee', userId,
-      name, licenseNumber: licNo, licenseExpiry: licExp,
-      vehicleId, licensePhoto: photo
-    });
-    showLoading(false); btn.disabled = false;
-    if (!res.ok) return showAlert('error', res.error || '登録失敗');
-    showAlert('ok', '社員登録しました');
-    document.querySelectorAll('#mstForm-employee input').forEach(i => i.value = '');
-  } catch (e) {
-    showLoading(false); btn.disabled = false;
-    showAlert('error', '処理失敗: ' + e.message);
-  }
-});
-
-// 車両登録（新規車両）
-document.getElementById('btnMstVehSubmit').addEventListener('click', async () => {
-  const vehicleNo   = document.getElementById('mstVehNo').value.trim();
-  const vehicleType = document.getElementById('mstVehType').value.trim();
-  const expiry      = document.getElementById('mstVehExpiry').value.trim();
-  if (!vehicleNo) return showAlert('error', '車両番号を入力してください');
-
-  const btn = document.getElementById('btnMstVehSubmit');
-  try {
-    btn.disabled = true; showLoading(true);
-    const photoFront      = await fileInputToDataURL('mstVehPhotoFront');
-    const photoBack       = await fileInputToDataURL('mstVehPhotoBack');
-    const photoFrontRight = await fileInputToDataURL('mstVehPhotoFrontRight');
-    const photoBackLeft   = await fileInputToDataURL('mstVehPhotoBackLeft');
-    const res = await apiPost({
-      action: 'register_vehicle', userId,
-      vehicleNo, vehicleType, expiry,
-      photoFront, photoBack, photoFrontRight, photoBackLeft
-    });
-    showLoading(false); btn.disabled = false;
-    if (!res.ok) return showAlert('error', res.error || '登録失敗');
-    showAlert('ok', '車両登録しました');
-    document.querySelectorAll('#mstForm-vehicle input').forEach(i => i.value = '');
-    // 車両一覧をリセット（次回開いたとき再読込）
-    const sel = document.getElementById('vehicleSelect');
-    while (sel.options.length > 1) sel.remove(1);
-  } catch (e) {
-    showLoading(false); btn.disabled = false;
-    showAlert('error', '処理失敗: ' + e.message);
-  }
-});
-
-/*********************************************************************
- * 完了報告
- *********************************************************************/
-document.getElementById('completionReceipts').addEventListener('change', () => {
-  const n = document.getElementById('completionReceipts').files.length;
-  document.getElementById('completionReceiptsCount').textContent = n > 0 ? `${n}枚 選択中` : '';
-});
-
-document.getElementById('btnCompletionSubmit').addEventListener('click', async () => {
-  const text = document.getElementById('completionText').value.trim();
-  if (!text) return showAlert('error', '総括を入力してください');
-
-  const fileInput = document.getElementById('completionReceipts');
-  const files = fileInput.files ? Array.from(fileInput.files) : [];
-  let receipts = [];
-  const btn = document.getElementById('btnCompletionSubmit');
-  btn.disabled = true; showLoading(true);
-  try {
-    if (files.length > 0) {
-      receipts = await Promise.all(files.map(f => fileToCompressedDataURL(f)));
-    }
-  } catch (e) {
-    showLoading(false); btn.disabled = false;
-    return showAlert('error', '画像処理失敗: ' + e.message);
-  }
-
-  const res = await apiPost({ action: 'completion', userId, reportText: text, receipts });
-  showLoading(false); btn.disabled = false;
-  if (!res.ok) return showAlert('error', res.error || '送信失敗');
-  const cnt = res.uploadedReceipts || 0;
-  showAlert('ok', '送信しました' + (cnt ? `（写真${cnt}枚）` : ''));
-  document.getElementById('completionText').value = '';
-  fileInput.value = '';
-  document.getElementById('completionReceiptsCount').textContent = '';
-});
-
-/*********************************************************************
- * 社内情報
- *********************************************************************/
-async function loadInfo() {
-  // const res = await apiPost({ action: 'info', userId });
-}
-
-/*********************************************************************
- * LIFF 初期化
- *********************************************************************/
-setTimeout(() => showLoading(false), 5000);
-
-(async function initLiff() {
-  try {
-    await liff.init({ liffId: LIFF_ID });
-    if (!liff.isLoggedIn()) {
-      if (liff.isInClient && liff.isInClient()) {
-        liff.login();
-        return;
-      }
-      userId = 'DEBUG_USER';
-      displayName = 'デバッグユーザー（ブラウザ）';
-      document.getElementById('userName').textContent = displayName;
-      return;
-    }
-    const profile = await liff.getProfile();
-    userId = profile.userId;
-    displayName = profile.displayName;
-    document.getElementById('userName').textContent = displayName + ' さん';
-  } catch (e) {
-    userId = 'DEBUG_USER';
-    displayName = 'デバッグユーザー';
-    document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
-    console.warn('LIFF init failed:', e);
-  } finally {
-    showLoading(false);
-  }
-})();
-</script>
-
-</body>
-</html>
-    document.getElementById('bizActionGeoText').textContent =
-      `取得済: ${bizActionGeo.lat.toFixed(5)}, ${bizActionGeo.lng.toFixed(5)}`;
-  } catch(e){ showAlert('error','位置情報取得失敗: '+e.message); }
-  finally { showLoading(false); }
-});
-document.getElementById('btnBizActionSubmit').addEventListener('click', async () => {
-  if (!bizActionMode) return showAlert('error', '「立ち寄り」または「終了」を選択');
-  if (!bizActionGeo)  return showAlert('error', '位置情報を取得してください');
-  const payload = {
-    action: 'business_report', userId, status: bizActionMode,
-    lat: bizActionGeo.lat, lng: bizActionGeo.lng
-  };
-  if (bizActionMode === 'end') {
-    const content = document.getElementById('bizEndContent').value.trim();
-    if (!content) return showAlert('error', '業務内容を入力してください');
-    payload.content = content;
-  }
-  const btn = document.getElementById('btnBizActionSubmit');
-  btn.disabled = true; showLoading(true);
-  const res = await apiPost(payload);
-  showLoading(false); btn.disabled = false;
-  if (!res.ok) return showAlert('error', res.error || '送信失敗');
-  showAlert('ok', bizActionMode === 'end' ? '業務を終了しました' : '立ち寄りを記録しました');
-  if (bizActionMode === 'end') loadBusinessStatus();
-});
-
-async function loadBusinessStatus() {
-  if (!userId) return;
-  showLoading(true);
-  const res = await apiPost({ action: 'business_status', userId });
-  showLoading(false);
-  const idle   = document.getElementById('bizIdle');
-  const active = document.getElementById('bizActive');
-  if (res.ok && res.status === 'in_progress') {
-    idle.classList.add('hidden-section');
-    active.classList.remove('hidden-section');
-    document.getElementById('bizActiveType').textContent = res.businessType || '';
-  } else {
-    idle.classList.remove('hidden-section');
-    active.classList.add('hidden-section');
-  }
-  bizActionMode = null; bizActionGeo = null;
-  document.getElementById('bizActionGeoText').textContent = '未取得';
-  document.getElementById('bizEndContent').value = '';
-  document.getElementById('bizEndContentBlock').classList.add('hidden-section');
-  document.getElementById('btnBizDropoffMode').classList.remove('bg-green-100');
-  document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
-}
-
-/*********************************************************************
- * 各種情報管理 - セクション切替
- *********************************************************************/
-document.querySelectorAll('.vsec-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const sec = btn.dataset.vsec;
-    document.querySelectorAll('.vsec-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.vSec').forEach(s => s.classList.toggle('hidden-section', s.id !== 'vSec-' + sec));
-  });
-});
-
-/*********************************************************************
- * 業務操作（車両関係）
- *********************************************************************/
-async function loadVehicleList() {
-  const sel = document.getElementById('vehicleSelect');
-  if (sel.options.length > 1) return;
-  showLoading(true);
-  const res = await apiPost({ action: 'vehicle_list' });
-  showLoading(false);
-  if (res.ok && Array.isArray(res.vehicles)) {
-    res.vehicles.forEach(v => {
-      const o = document.createElement('option');
-      o.value = v.id; o.textContent = v.label;
-      sel.appendChild(o);
-    });
-  }
-}
-
-document.querySelectorAll('.vsub-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    vehicleSubType = btn.dataset.vsub;
-    document.querySelectorAll('.vsub-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.vForm').forEach(f =>
-      f.classList.toggle('hidden-section', f.id !== 'vForm-' + vehicleSubType));
-  });
-});
-
-document.getElementById('btnVehicleSubmit').addEventListener('click', async () => {
-  const vehicleId = document.getElementById('vehicleSelect').value;
-  if (!vehicleId)      return showAlert('error', '車両を選択してください');
-  if (!vehicleSubType) return showAlert('error', '項目を選択してください');
-
-  const payload = { action: 'vehicle', userId, subType: vehicleSubType, vehicleId };
-  const btn = document.getElementById('btnVehicleSubmit');
-
-  try {
-    btn.disabled = true; showLoading(true);
-
-    if (vehicleSubType === 'refuel') {
-      const liter  = document.getElementById('vRefuelLiter').value;
-      const amount = document.getElementById('vRefuelAmount').value;
-      const odo    = document.getElementById('vRefuelOdo').value;
-      if (liter === '' || amount === '' || odo === '') {
-        showLoading(false); btn.disabled = false;
-        return showAlert('error', '給油量・金額・走行距離を入力してください');
-      }
-      payload.liter  = Number(liter);
-      payload.amount = Number(amount);
-      payload.odo    = Number(odo);
-    } else if (vehicleSubType === 'oil') {
-      const odo = document.getElementById('vOilOdo').value;
-      if (odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '走行距離を入力してください'); }
-      payload.odo = Number(odo);
-    } else if (vehicleSubType === 'condition') {
-      const sel = document.querySelector('input[name="vCondAbn"]:checked');
-      if (!sel) { showLoading(false); btn.disabled = false; return showAlert('error', '異常有無を選択してください'); }
-      payload.abnormal = sel.value;
-      payload.note = document.getElementById('vCondNote').value.trim();
-      payload.photo = await fileInputToDataURL('vCondPhoto');
-    } else if (vehicleSubType === 'photo') {
-      payload.photoFront      = await fileInputToDataURL('vPhotoFront');
-      payload.photoBack       = await fileInputToDataURL('vPhotoBack');
-      payload.photoFrontRight = await fileInputToDataURL('vPhotoFrontRight');
-      payload.photoBackLeft   = await fileInputToDataURL('vPhotoBackLeft');
-      if (!payload.photoFront && !payload.photoBack && !payload.photoFrontRight && !payload.photoBackLeft) {
-        showLoading(false); btn.disabled = false;
-        return showAlert('error', '少なくとも1枚は写真を選択してください');
-      }
-    }
-
-    const res = await apiPost(payload);
-    showLoading(false); btn.disabled = false;
-    if (!res.ok) return showAlert('error', res.error || '送信失敗');
-    showAlert('ok', '送信しました');
-    document.querySelectorAll('#vSec-op input').forEach(i => {
-      if (i.type === 'radio') i.checked = false; else i.value = '';
-    });
-    document.getElementById('vCondNote').value = '';
-  } catch (e) {
-    showLoading(false); btn.disabled = false;
-    showAlert('error', '処理失敗: ' + e.message);
-  }
-});
-
-/*********************************************************************
- * マスター登録
- *********************************************************************/
 document.querySelectorAll('.mst-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     mstMode = btn.dataset.mst;
@@ -1065,9 +761,6 @@ document.getElementById('btnMstVehSubmit').addEventListener('click', async () =>
   }
 });
 
-/*********************************************************************
- * 完了報告
- *********************************************************************/
 document.getElementById('completionReceipts').addEventListener('change', () => {
   const n = document.getElementById('completionReceipts').files.length;
   document.getElementById('completionReceiptsCount').textContent = n > 0 ? `${n}枚 選択中` : '';
@@ -1101,15 +794,9 @@ document.getElementById('btnCompletionSubmit').addEventListener('click', async (
   document.getElementById('completionReceiptsCount').textContent = '';
 });
 
-/*********************************************************************
- * 社内情報
- *********************************************************************/
 async function loadInfo() {
 }
 
-/*********************************************************************
- * LIFF 初期化
- *********************************************************************/
 setTimeout(() => showLoading(false), 5000);
 
 (async function initLiff() {
@@ -1133,16 +820,6 @@ setTimeout(() => showLoading(false), 5000);
     userId = 'DEBUG_USER';
     displayName = 'デバッグユーザー';
     document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
-    console.warn('LIFF init failed:', e);
-  } finally {
-    showLoading(false);
-  }
-})();
-</script>
-
-</body>
-</html>
-ument.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
     console.warn('LIFF init failed:', e);
   } finally {
     showLoading(false);
