@@ -7,11 +7,86 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { padding-bottom: 80px; }
-  .tab-btn.active { color:#16a34a; font-weight:700; }
+  body { padding-bottom: 110px; }
   .hidden-section { display:none; }
   .loading-mask { position:fixed; inset:0; background:rgba(255,255,255,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; }
   .vsec-btn.active, .vsub-btn.active, .mst-btn.active { background:#dcfce7; border-color:#16a34a; color:#15803d; font-weight:600; }
+
+  /* === タブバー (2段) === */
+  .tab-nav {
+    background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%);
+    border-top: 2px solid #e5e7eb;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+  }
+  .tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px;
+    font-size: 11px;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    border-right: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.15s;
+    position: relative;
+    min-height: 48px;
+    cursor: pointer;
+  }
+  .tab-btn:nth-child(4n) { border-right: none; }
+  .tab-btn:nth-last-child(-n+4):not(:nth-child(-n+4)):not(:nth-child(4n)) { border-bottom: none; }
+  .tab-btn-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .tab-btn:active {
+    background: #f3f4f6;
+    transform: scale(0.96);
+  }
+  .tab-btn.active {
+    color: #16a34a;
+    font-weight: 700;
+    background: linear-gradient(to bottom, #f0fdf4 0%, #dcfce7 100%);
+  }
+  .tab-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 3px;
+    background: #16a34a;
+    border-radius: 0 0 3px 3px;
+  }
+
+  /* バッジ */
+  .tab-badge {
+    position: absolute;
+    top: 4px;
+    right: 12px;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+  /* admin tab の右下境界 */
+  #adminTabBtn { border-right: none; }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -334,14 +409,29 @@
   </section>
 </main>
 
-<nav class="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg grid grid-cols-4 gap-px">
-  <button data-tab="attendance" class="tab-btn py-2 text-xs active">出退勤</button>
-  <button data-tab="business" class="tab-btn py-2 text-xs">業務</button>
-  <button data-tab="vehicle" class="tab-btn py-2 text-xs">情報管理</button>
-  <button data-tab="completion" class="tab-btn py-2 text-xs">完了報告</button>
-  <button data-tab="notice" class="tab-btn py-2 text-xs relative">お知らせ<span id="noticeBadge" class="hidden-section absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center" style="font-size:10px"></span></button>
-  <button data-tab="info" class="tab-btn py-2 text-xs">社内情報</button>
-  <button data-tab="admin" class="tab-btn py-2 text-xs hidden-section" id="adminTabBtn">管理者</button>
+<nav class="fixed bottom-0 left-0 right-0 tab-nav grid grid-cols-4">
+  <button data-tab="attendance" class="tab-btn active">
+    <span class="tab-btn-label">出退勤</span>
+  </button>
+  <button data-tab="business" class="tab-btn">
+    <span class="tab-btn-label">業務</span>
+  </button>
+  <button data-tab="vehicle" class="tab-btn">
+    <span class="tab-btn-label">情報管理</span>
+  </button>
+  <button data-tab="completion" class="tab-btn">
+    <span class="tab-btn-label">完了報告</span>
+  </button>
+  <button data-tab="notice" class="tab-btn">
+    <span class="tab-btn-label">お知らせ</span>
+    <span id="noticeBadge" class="tab-badge hidden-section">0</span>
+  </button>
+  <button data-tab="info" class="tab-btn">
+    <span class="tab-btn-label">社内情報</span>
+  </button>
+  <button data-tab="admin" class="tab-btn hidden-section" id="adminTabBtn">
+    <span class="tab-btn-label">管理者</span>
+  </button>
 </nav>
 
 <script>
@@ -1012,7 +1102,23 @@ switchTab = function(name) {
   _originalSwitchTab(name);
   if (name === 'notice') loadNotices();
   if (name === 'admin') loadAdminTab();
+  // 他のタブに切り替え時もバッジを更新
+  if (name !== 'notice' && userId) refreshNoticeBadgeOnly();
 };
+
+// バッジだけを軽量に更新する関数
+async function refreshNoticeBadgeOnly() {
+  try {
+    const res = await apiPost({ action: 'notif_list', userId: userId });
+    if (res.ok) {
+      const unconfirmedCount = (res.notifications || []).filter(n => !n.confirmed && !n.expired).length;
+      updateNoticeBadge(unconfirmedCount);
+    }
+  } catch (_) {}
+}
+
+// 60秒ごとにバッジを自動更新
+setInterval(() => { if (userId) refreshNoticeBadgeOnly(); }, 60000);
 
 
 // === init notification on load ===
