@@ -263,14 +263,85 @@
       <div><h3 class="font-semibold text-sm mb-2">社内お知らせ</h3><div class="text-sm text-gray-600 border rounded p-3 bg-gray-50">お知らせはありません。</div></div>
     </div>
   </section>
+
+  <section id="tab-notice" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">お知らせ</h2>
+    <div id="noticeList" class="space-y-2">
+      <div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>
+    </div>
+    <div id="noticeDetail" class="hidden-section bg-white rounded shadow p-4 space-y-3 mt-4">
+      <button id="btnNoticeBack" class="text-sm text-blue-600">← 一覧に戻る</button>
+      <div id="noticeDetailHeader" class="border-b pb-2"></div>
+      <div id="noticeDetailContent" class="text-sm whitespace-pre-wrap"></div>
+      <button id="btnNoticeConfirm" class="block w-full text-center py-3 bg-green-600 text-white font-bold rounded">確認しました</button>
+    </div>
+  </section>
+
+  <section id="tab-admin" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">管理者</h2>
+    <div class="bg-white rounded shadow p-4 space-y-3 mb-4">
+      <h3 class="font-semibold text-sm border-b pb-2">📝 新規お知らせ作成</h3>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">カテゴリ</label>
+        <select id="admCategory" class="w-full border rounded p-2">
+          <option value="お知らせ">お知らせ</option>
+          <option value="緊急">緊急</option>
+          <option value="個別連絡">個別連絡</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">宛先タイプ</label>
+        <select id="admRecipientType" class="w-full border rounded p-2">
+          <option value="全員">全員</option>
+          <option value="グループ">グループ選択</option>
+          <option value="個人">個人選択</option>
+        </select>
+      </div>
+      <div id="admGroupBlock" class="hidden-section">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">グループ</label>
+        <select id="admGroupSelect" class="w-full border rounded p-2"></select>
+      </div>
+      <div id="admPersonBlock" class="hidden-section">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">個人選択（複数選択可）</label>
+        <div id="admPersonList" class="border rounded p-2 max-h-40 overflow-y-auto space-y-1 text-sm"></div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">件名</label>
+        <input type="text" id="admSubject" class="w-full border rounded p-2" placeholder="例：明日休業のお知らせ">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">本文</label>
+        <textarea id="admContent" rows="5" class="w-full border rounded p-2" placeholder="本文を入力"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">有効期限</label>
+        <select id="admExpiry" class="w-full border rounded p-2">
+          <option value="0">期限なし</option>
+          <option value="5">5日</option>
+          <option value="10">10日</option>
+          <option value="30" selected>30日</option>
+          <option value="180">180日</option>
+        </select>
+      </div>
+      <button id="btnAdmCreateAndSend" class="block w-full text-center py-3 bg-green-600 text-white font-bold rounded">📤 即送信</button>
+      <button id="btnAdmCreateDraft" class="block w-full text-center py-2 border border-gray-300 rounded text-sm">下書き保存</button>
+    </div>
+    <div class="bg-white rounded shadow p-4 space-y-3">
+      <h3 class="font-semibold text-sm border-b pb-2">📋 送信履歴</h3>
+      <div id="admHistoryList" class="space-y-2 text-sm"></div>
+    </div>
+  </section>
 </main>
 
 <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around shadow-lg">
-  <button data-tab="attendance" class="tab-btn flex-1 py-3 text-xs active">出退勤</button>
-  <button data-tab="business" class="tab-btn flex-1 py-3 text-xs">業務報告</button>
-  <button data-tab="vehicle" class="tab-btn flex-1 py-3 text-xs">各種情報管理</button>
-  <button data-tab="completion" class="tab-btn flex-1 py-3 text-xs">完了報告</button>
-  <button data-tab="info" class="tab-btn flex-1 py-3 text-xs">社内情報</button>
+  <button data-tab="attendance" class="tab-btn flex-1 py-2 text-xs active">出退勤</button>
+  <button data-tab="business" class="tab-btn flex-1 py-2 text-xs">業務</button>
+  <button data-tab="vehicle" class="tab-btn flex-1 py-2 text-xs">情報管理</button>
+  <button data-tab="completion" class="tab-btn flex-1 py-2 text-xs">完了報告</button>
+  <button data-tab="notice" class="tab-btn flex-1 py-2 text-xs relative">お知らせ<span id="noticeBadge" class="hidden-section absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center" style="font-size:10px"></span></button>
+  <button data-tab="info" class="tab-btn flex-1 py-2 text-xs">社内情報</button>
+  <button data-tab="admin" class="tab-btn flex-1 py-2 text-xs hidden-section" id="adminTabBtn">管理者</button>
 </nav>
 
 <script>
@@ -682,16 +753,270 @@ setTimeout(() => showLoading(false), 5000);
     userId = profile.userId;
     displayName = profile.displayName;
     document.getElementById('userName').textContent = displayName + ' さん';
+      checkAdminStatus().then(() => loadNotices());
   } catch (e) {
     userId = 'DEBUG_USER';
     displayName = 'デバッグユーザー';
     document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
+    checkAdminStatus().then(() => loadNotices());
     console.warn('LIFF init failed:', e);
   } finally {
     showLoading(false);
     try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch (_) {}
   }
 })();
+
+// === お知らせ機能 ===
+let currentNotices = [];
+let currentNoticeId = null;
+let isAdminUser = false;
+let employeeListCache = [];
+let groupListCache = [];
+
+async function loadNotices() {
+  const list = document.getElementById('noticeList');
+  list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>';
+  const res = await apiPost({ action: 'notif_list', userId: userId });
+  if (!res.ok) {
+    list.innerHTML = '<div class="text-sm text-red-500 text-center py-8">読み込み失敗: ' + (res.error || '') + '</div>';
+    return;
+  }
+  currentNotices = res.notifications || [];
+  renderNoticeList();
+}
+
+function renderNoticeList() {
+  const list = document.getElementById('noticeList');
+  document.getElementById('noticeDetail').classList.add('hidden-section');
+  document.getElementById('noticeList').classList.remove('hidden-section');
+  if (currentNotices.length === 0) {
+    list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">お知らせはありません</div>';
+    updateNoticeBadge(0);
+    return;
+  }
+  const unconfirmedCount = currentNotices.filter(n => !n.confirmed && !n.expired).length;
+  updateNoticeBadge(unconfirmedCount);
+  const colorMap = { '緊急':'border-red-500 bg-red-50', 'お知らせ':'border-blue-500 bg-blue-50', '個別連絡':'border-green-500 bg-green-50', 'その他':'border-gray-400 bg-gray-50' };
+  list.innerHTML = currentNotices.map(n => {
+    const color = colorMap[n.category] || 'border-gray-400 bg-white';
+    const badge = n.expired
+      ? '<span class="text-xs text-gray-500">期限切れ</span>'
+      : (n.confirmed
+        ? '<span class="text-xs text-green-600 font-semibold">✓ 確認済</span>'
+        : '<span class="text-xs text-red-600 font-semibold">● 未確認</span>');
+    const dt = String(n.sentAt).split(' ')[0] + ' ' + (String(n.sentAt).split(' ')[1] || '').substring(0, 5);
+    return `<div class="border-l-4 ${color} rounded p-3 cursor-pointer notice-item" data-id="${n.id}">
+      <div class="flex justify-between items-center mb-1">
+        <span class="text-xs text-gray-600">【${n.category}】 ${dt}</span>
+        ${badge}
+      </div>
+      <div class="font-semibold text-sm">${escapeHtml(n.subject)}</div>
+      <div class="text-xs text-gray-500 mt-1">送信者: ${escapeHtml(n.sender)}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.notice-item').forEach(el => {
+    el.addEventListener('click', () => showNoticeDetail(el.dataset.id));
+  });
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function showNoticeDetail(id) {
+  const n = currentNotices.find(x => x.id === id);
+  if (!n) return;
+  currentNoticeId = id;
+  document.getElementById('noticeList').classList.add('hidden-section');
+  document.getElementById('noticeDetail').classList.remove('hidden-section');
+  const dt = String(n.sentAt);
+  document.getElementById('noticeDetailHeader').innerHTML = `
+    <div class="text-xs text-gray-600 mb-1">【${n.category}】 ${dt}</div>
+    <div class="font-bold text-base">${escapeHtml(n.subject)}</div>
+    <div class="text-xs text-gray-500 mt-1">送信者: ${escapeHtml(n.sender)}</div>
+  `;
+  document.getElementById('noticeDetailContent').textContent = n.content;
+  const btn = document.getElementById('btnNoticeConfirm');
+  if (n.confirmed) {
+    btn.textContent = '✓ 確認済み (' + n.myStatus.replace('✅ ', '') + ')';
+    btn.className = 'block w-full text-center py-3 bg-gray-300 text-gray-600 font-bold rounded';
+    btn.disabled = true;
+  } else {
+    btn.textContent = '確認しました';
+    btn.className = 'block w-full text-center py-3 bg-green-600 text-white font-bold rounded';
+    btn.disabled = false;
+  }
+}
+
+function updateNoticeBadge(count) {
+  const badge = document.getElementById('noticeBadge');
+  if (count > 0) {
+    badge.textContent = count > 9 ? '9+' : count;
+    badge.classList.remove('hidden-section');
+  } else {
+    badge.classList.add('hidden-section');
+  }
+}
+
+document.getElementById('btnNoticeBack').addEventListener('click', () => {
+  document.getElementById('noticeDetail').classList.add('hidden-section');
+  document.getElementById('noticeList').classList.remove('hidden-section');
+});
+
+document.getElementById('btnNoticeConfirm').addEventListener('click', async () => {
+  if (!currentNoticeId) return;
+  showLoading(true);
+  const res = await apiPost({ action: 'notif_confirm', userId: userId, notificationId: currentNoticeId });
+  showLoading(false);
+  if (res.ok) {
+    showAlert('success', '確認済みにしました');
+    await loadNotices();
+    showNoticeDetail(currentNoticeId);
+  } else {
+    showAlert('error', '失敗: ' + (res.error || ''));
+  }
+});
+
+// === 管理者機能 ===
+async function checkAdminStatus() {
+  const res = await apiPost({ action: 'notif_is_admin', userId: userId });
+  isAdminUser = res.ok && res.isAdmin;
+  document.getElementById('adminTabBtn').classList.toggle('hidden-section', !isAdminUser);
+}
+
+async function loadEmployeeList() {
+  const res = await apiPost({ action: 'notif_employee_list', userId: userId });
+  if (res.ok) employeeListCache = res.employees || [];
+  return employeeListCache;
+}
+
+async function loadGroupList() {
+  const res = await apiPost({ action: 'notif_group_list', userId: userId });
+  if (res.ok) groupListCache = res.groups || [];
+  return groupListCache;
+}
+
+async function loadAdminTab() {
+  if (!isAdminUser) return;
+  await loadEmployeeList();
+  await loadGroupList();
+  // Populate group select
+  const gs = document.getElementById('admGroupSelect');
+  gs.innerHTML = groupListCache.map(g => `<option value="${escapeHtml(g.name)}">${escapeHtml(g.name)} (${g.members.length}名)</option>`).join('');
+  // Populate person checkboxes
+  const pl = document.getElementById('admPersonList');
+  pl.innerHTML = employeeListCache.map(e =>
+    `<label class="flex items-center gap-2"><input type="checkbox" value="${e.userId}" class="adm-person-cb"> <span>${escapeHtml(e.name)}</span></label>`
+  ).join('');
+  await loadAdminHistory();
+}
+
+document.getElementById('admRecipientType').addEventListener('change', (e) => {
+  document.getElementById('admGroupBlock').classList.toggle('hidden-section', e.target.value !== 'グループ');
+  document.getElementById('admPersonBlock').classList.toggle('hidden-section', e.target.value !== '個人');
+});
+
+function getAdminFormData(asDraft) {
+  const category = document.getElementById('admCategory').value;
+  const recipientType = document.getElementById('admRecipientType').value;
+  let recipient = '';
+  if (recipientType === 'グループ') {
+    recipient = document.getElementById('admGroupSelect').value;
+  } else if (recipientType === '個人') {
+    const ids = Array.from(document.querySelectorAll('.adm-person-cb:checked')).map(cb => cb.value);
+    recipient = ids.join(',');
+  }
+  const subject = document.getElementById('admSubject').value.trim();
+  const content = document.getElementById('admContent').value.trim();
+  const expiryDays = Number(document.getElementById('admExpiry').value);
+  return { category, recipientType, recipient, subject, content, expiryDays };
+}
+
+async function adminCreate(autoSend) {
+  const d = getAdminFormData();
+  if (!d.subject) { showAlert('error', '件名を入力してください'); return; }
+  if (!d.content) { showAlert('error', '本文を入力してください'); return; }
+  if (d.recipientType !== '全員' && !d.recipient) {
+    showAlert('error', '宛先を選択してください'); return;
+  }
+  showLoading(true);
+  const res = await apiPost({ action: 'notif_create', userId: userId, ...d });
+  if (!res.ok) {
+    showLoading(false);
+    showAlert('error', '作成失敗: ' + (res.error || '')); return;
+  }
+  if (autoSend) {
+    const sendRes = await apiPost({ action: 'notif_send', userId: userId, notificationId: res.notificationId });
+    showLoading(false);
+    if (sendRes.ok) {
+      showAlert('success', `送信完了！${sendRes.sentTo}名に送信、${sendRes.failed}件失敗`);
+      clearAdminForm();
+      await loadAdminHistory();
+    } else {
+      showAlert('error', '送信失敗: ' + (sendRes.error || ''));
+    }
+  } else {
+    showLoading(false);
+    showAlert('success', '下書き保存完了。送信履歴から送信できます');
+    clearAdminForm();
+    await loadAdminHistory();
+  }
+}
+
+function clearAdminForm() {
+  document.getElementById('admSubject').value = '';
+  document.getElementById('admContent').value = '';
+  document.querySelectorAll('.adm-person-cb').forEach(cb => cb.checked = false);
+}
+
+document.getElementById('btnAdmCreateAndSend').addEventListener('click', () => adminCreate(true));
+document.getElementById('btnAdmCreateDraft').addEventListener('click', () => adminCreate(false));
+
+async function loadAdminHistory() {
+  const list = document.getElementById('admHistoryList');
+  list.innerHTML = '<div class="text-gray-500 text-center py-2">読み込み中...</div>';
+  // Use the regular notification list as admin (will show all notifications you sent or received)
+  const res = await apiPost({ action: 'notif_list', userId: userId });
+  if (!res.ok) {
+    list.innerHTML = '<div class="text-red-500">読み込み失敗</div>';
+    return;
+  }
+  const items = (res.notifications || []).slice(0, 20);
+  if (items.length === 0) {
+    list.innerHTML = '<div class="text-gray-500 text-center py-2">送信履歴なし</div>';
+    return;
+  }
+  list.innerHTML = items.map(n => {
+    const dt = String(n.sentAt).substring(0, 16);
+    return `<div class="border rounded p-2">
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-gray-600">${dt} 【${n.category}】</span>
+        <button class="text-xs text-blue-600 btn-resend" data-id="${n.id}">未確認者に再送</button>
+      </div>
+      <div class="font-semibold text-sm mt-1">${escapeHtml(n.subject)}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.btn-resend').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('未確認者に再送しますか？')) return;
+    showLoading(true);
+    const r = await apiPost({ action: 'notif_resend', userId: userId, notificationId: b.dataset.id });
+    showLoading(false);
+    if (r.ok) showAlert('success', `${r.resentTo}名に再送しました`);
+    else showAlert('error', '失敗: ' + (r.error || ''));
+  }));
+}
+
+// switchTabのフックを更新（既存のswitchTabを上書きせず追加）
+const _originalSwitchTab = switchTab;
+switchTab = function(name) {
+  _originalSwitchTab(name);
+  if (name === 'notice') loadNotices();
+  if (name === 'admin') loadAdminTab();
+};
+
+
+// === init notification on load ===
+setTimeout(() => { if (userId) checkAdminStatus(); }, 2000);
 </script>
 </body>
 </html>
