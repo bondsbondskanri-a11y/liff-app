@@ -122,6 +122,7 @@
 
   <section id="tab-attendance" class="section">
     <h2 class="text-lg font-bold mb-3">出退勤</h2>
+    <div id="attStatusBanner" class="hidden-section mb-3 p-3 rounded shadow text-sm font-semibold"></div>
     <div class="bg-white rounded shadow p-4 space-y-4">
       <div>
         <label class="block text-sm font-semibold mb-2">区分</label>
@@ -145,6 +146,7 @@
 
   <section id="tab-business" class="section hidden-section">
     <h2 class="text-lg font-bold mb-3">業務報告</h2>
+    <div id="bizStatusBanner" class="hidden-section mb-3 p-3 rounded shadow text-sm font-semibold"></div>
     <div id="bizIdle" class="bg-white rounded shadow p-4 space-y-4">
       <div><label class="block text-sm font-semibold mb-2">業務区分</label><div id="bizTypeButtons" class="grid grid-cols-2 gap-2"></div></div>
       <div>
@@ -844,6 +846,8 @@ setTimeout(() => showLoading(false), 5000);
     displayName = profile.displayName;
     document.getElementById('userName').textContent = displayName + ' さん';
       checkAdminStatus().then(() => loadNotices());
+    refreshAttendanceBanner(); refreshBusinessBanner();
+      refreshAttendanceBanner(); refreshBusinessBanner();
   } catch (e) {
     userId = 'DEBUG_USER';
     displayName = 'デバッグユーザー';
@@ -1095,6 +1099,58 @@ async function loadAdminHistory() {
     else showAlert('error', '失敗: ' + (r.error || ''));
   }));
 }
+
+
+// === 出退勤・業務 進行中バナー ===
+async function refreshAttendanceBanner() {
+  if (!userId) return;
+  const banner = document.getElementById('attStatusBanner');
+  try {
+    const res = await apiPost({ action: 'attendance_status', userId: userId });
+    if (!res.ok) { banner.classList.add('hidden-section'); return; }
+    if (res.status === 'in') {
+      const t = String(res.clockInTime).split(' ')[1] || '';
+      banner.className = 'mb-3 p-3 rounded shadow text-sm font-semibold bg-green-100 text-green-800 border-l-4 border-green-500';
+      banner.innerHTML = '🟢 現在出勤記録中です<br><span class="text-xs font-normal">出勤時刻: ' + t.substring(0, 5) + '</span>';
+      banner.classList.remove('hidden-section');
+    } else if (res.status === 'out') {
+      const tIn = String(res.clockInTime).split(' ')[1] || '';
+      const tOut = String(res.clockOutTime).split(' ')[1] || '';
+      banner.className = 'mb-3 p-3 rounded shadow text-sm font-semibold bg-gray-100 text-gray-700 border-l-4 border-gray-400';
+      banner.innerHTML = '⚪ 本日退勤済み<br><span class="text-xs font-normal">出勤: ' + tIn.substring(0, 5) + ' / 退勤: ' + tOut.substring(0, 5) + '</span>';
+      banner.classList.remove('hidden-section');
+    } else {
+      banner.classList.add('hidden-section');
+    }
+  } catch (e) {
+    banner.classList.add('hidden-section');
+  }
+}
+
+async function refreshBusinessBanner() {
+  if (!userId) return;
+  const banner = document.getElementById('bizStatusBanner');
+  try {
+    const res = await apiPost({ action: 'business_status', userId: userId });
+    if (res.ok && res.status === 'in_progress') {
+      banner.className = 'mb-3 p-3 rounded shadow text-sm font-semibold bg-blue-100 text-blue-800 border-l-4 border-blue-500';
+      banner.innerHTML = '🔵 ' + res.businessType + ' 記録中です';
+      banner.classList.remove('hidden-section');
+    } else {
+      banner.classList.add('hidden-section');
+    }
+  } catch (e) {
+    banner.classList.add('hidden-section');
+  }
+}
+
+// switchTabにフックを追加
+const _origSwitchTab2 = switchTab;
+switchTab = function(name) {
+  _origSwitchTab2(name);
+  refreshAttendanceBanner();
+  refreshBusinessBanner();
+};
 
 // switchTabのフックを更新（既存のswitchTabを上書きせず追加）
 const _originalSwitchTab = switchTab;
