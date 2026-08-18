@@ -1,0 +1,460 @@
+TEST-PASTE-OK<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>タイムカード</title>
+
+<!--
+  BOND'S株式会社 パート用タイムカード ── 打刻画面
+  対象スプレッドシート: トラビス勤怠管理
+
+  ★設計方針
+   - 画面は1枚。状態に応じて「押せるボタンだけ」を出す
+   - 押せる押せないの判定はサーバーが最終決定。画面は見た目を整えるだけ
+   - 二重送信は 送信中フラグ + ボタン無効化 + サーバー側ロック の三重で防ぐ
+   - LINE Messaging API は呼ばない（トークン失効の影響を受けない）
+
+  最終更新: 2026-08-18
+-->
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<style>
+  :root {
+    --green:  #06c755;
+    --orange: #ff9500;
+    --blue:   #2d7ff9;
+    --red:    #e8483f;
+    --gray:   #8e9297;
+    --bg:     #f2f4f7;
+    --card:   #ffffff;
+    --text:   #1a1d21;
+    --muted:  #6b7280;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Noto Sans JP", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+    min-height: 100vh;
+  }
+
+  /* ---- ヘッダー ---- */
+  .head { text-align: center; margin-bottom: 18px; }
+  .name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .dept { font-size: 13px; color: var(--muted); }
+
+  /* ---- 現在時刻 ---- */
+  .clock {
+    text-align: center;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 18px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .clock .date { font-size: 14px; color: var(--muted); margin-bottom: 2px; }
+  .clock .time {
+    font-size: 44px; font-weight: 700; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- 状態バッジ ---- */
+  .status {
+    text-align: center;
+    padding: 14px;
+    border-radius: 16px;
+    margin-bottom: 18px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--gray);
+  }
+  .status.NOT_IN  { background: var(--gray); }
+  .status.WORKING { background: var(--green); }
+  .status.BREAK   { background: var(--orange); }
+  .status.DONE    { background: var(--blue); }
+
+  /* ---- ボタン ---- */
+  .buttons { display: flex; flex-direction: column; gap: 12px; }
+
+  button.punch {
+    width: 100%;
+    padding: 22px 16px;
+    font-size: 21px;
+    font-weight: 700;
+    color: #fff;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,.12);
+    transition: transform .08s, opacity .15s;
+  }
+  button.punch:active { transform: scale(.97); }
+  button.punch:disabled { opacity: .5; cursor: not-allowed; }
+
+  .btn-in    { background: var(--green); }
+  .btn-bs    { background: var(--orange); }
+  .btn-be    { background: var(--green); }
+  .btn-out   { background: var(--red); }
+
+  /* ---- 今日の打刻 ---- */
+  .today {
+    margin-top: 22px;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .today h2 {
+    font-size: 13px; color: var(--muted);
+    margin: 0 0 10px; font-weight: 600;
+  }
+  .today ul { list-style: none; margin: 0; padding: 0; }
+  .today li {
+    display: flex; justify-content: space-between;
+    padding: 7px 0; font-size: 15px;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  .today li:last-child { border-bottom: none; }
+  .today .empty { color: var(--muted); font-size: 14px; padding: 4px 0; }
+  .today .t { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* ---- メッセージ ---- */
+  .msg {
+    margin: 14px 0 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.5;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.ok   { background: #e6f7ed; color: #0a6b35; }
+  .msg.err  { background: #fdecea; color: #9b1c14; }
+  .msg.warn { background: #fff5e0; color: #8a5a00; }
+
+  /* ---- ローディング ---- */
+  .loading {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+  }
+  .spinner {
+    width: 34px; height: 34px; margin: 0 auto 14px;
+    border: 3px solid #dfe2e6;
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+
+  .foot {
+    margin-top: 26px; text-align: center;
+    font-size: 11px; color: #aab0b6;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- 読み込み中 -->
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    <div>読み込んでいます…</div>
+  </div>
+
+  <!-- 本体 -->
+  <div id="main" class="hidden">
+
+    <div class="head">
+      <div class="name" id="userName">—</div>
+      <div class="dept" id="userDept"></div>
+    </div>
+
+    <div class="clock">
+      <div class="date" id="clockDate">—</div>
+      <div class="time" id="clockTime">--:--</div>
+    </div>
+
+    <div class="status" id="statusBox">—</div>
+
+    <div class="buttons" id="buttons"></div>
+
+    <div class="msg" id="msg"></div>
+
+    <div class="today">
+      <h2>今日の打刻</h2>
+      <ul id="todayList"></ul>
+    </div>
+
+    <div class="foot">トラビス勤怠管理</div>
+  </div>
+
+  <!-- 起動失敗 -->
+  <div id="fatal" class="hidden">
+    <div class="msg err show" id="fatalMsg"></div>
+  </div>
+
+</div>
+
+<script>
+/* ===== 要設定 ===================================================== */
+// LINE Developers で発行した LIFF ID
+var LIFF_ID = '__ここにLIFF IDを貼る__';
+
+// GASウェブアプリの /exec URL（2026-08-18 設定済み）
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbxMaO67l76Pw1qQwyAgj5TWzwmDLxjsThNGxU8aCyARrvmZEoFefvPQacYMOfmh8-xy/exec';
+/* ================================================================== */
+
+var TYPE_IN = '出勤';
+var TYPE_BS = '休憩開始';
+var TYPE_BE = '休憩終了';
+var TYPE_OUT = '退勤';
+
+var BTN_DEF = {};
+BTN_DEF[TYPE_IN]  = { label: '出　勤',   cls: 'btn-in'  };
+BTN_DEF[TYPE_BS]  = { label: '休憩開始', cls: 'btn-bs'  };
+BTN_DEF[TYPE_BE]  = { label: '休憩終了', cls: 'btn-be'  };
+BTN_DEF[TYPE_OUT] = { label: '退　勤',   cls: 'btn-out' };
+
+var userId = '';
+var displayName = '';
+var sending = false;   // 二重送信ガード
+
+/* ---------- 起動 ---------- */
+window.addEventListener('load', function () {
+  startClock();
+  boot();
+});
+
+function boot() {
+  if (LIFF_ID.indexOf('__') === 0) {
+    return fatal('LIFF ID が未設定です。timecard_liff.html の LIFF_ID を設定してください。');
+  }
+  if (GAS_URL.indexOf('__') === 0) {
+    return fatal('GAS URL が未設定です。timecard_liff.html の GAS_URL を設定してください。');
+  }
+
+  liff.init({ liffId: LIFF_ID })
+    .then(function () {
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return null;
+      }
+      return liff.getProfile();
+    })
+    .then(function (profile) {
+      if (!profile) return;
+      userId = profile.userId;
+      displayName = profile.displayName || '';
+      return loadStatus();
+    })
+    .catch(function (e) {
+      fatal('起動に失敗しました。\n' + (e && e.message ? e.message : e));
+    });
+}
+
+function fatal(text) {
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('main').classList.add('hidden');
+  document.getElementById('fatal').classList.remove('hidden');
+  document.getElementById('fatalMsg').textContent = text;
+}
+
+/* ---------- 時計 ---------- */
+function startClock() {
+  tick();
+  setInterval(tick, 1000);
+}
+function tick() {
+  var n = new Date();
+  var w = ['日','月','火','水','木','金','土'][n.getDay()];
+  var d = document.getElementById('clockDate');
+  var t = document.getElementById('clockTime');
+  if (d) d.textContent = (n.getMonth() + 1) + '月' + n.getDate() + '日（' + w + '）';
+  if (t) t.textContent = p2(n.getHours()) + ':' + p2(n.getMinutes());
+}
+function p2(n) { return ('0' + n).slice(-2); }
+
+/* ---------- 通信 ---------- */
+// GASのCORSプリフライトを避けるため text/plain で送る（配車アプリと同じ）
+function api(payload) {
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(function (r) {
+    if (!r.ok) throw new Error('通信エラー (HTTP ' + r.status + ')');
+    return r.json();
+  });
+}
+
+function loadStatus() {
+  return api({ action: 'get_status', userId: userId, displayName: displayName })
+    .then(function (res) {
+      if (!res.ok) throw new Error(res.error || '状態を取得できませんでした');
+      render(res);
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('main').classList.remove('hidden');
+      if (!res.registered) {
+        showMsg('warn',
+          'スタッフ登録がまだのようです。打刻は記録されますが、' +
+          '管理者に登録を依頼してください。');
+      }
+    })
+    .catch(function (e) {
+      fatal('データを取得できませんでした。\n' +
+            (e && e.message ? e.message : e) +
+            '\n\n通信環境を確認して、画面を開き直してください。');
+    });
+}
+
+/* ---------- 描画 ---------- */
+function render(res) {
+  document.getElementById('userName').textContent = res.name || '(名前未設定)';
+  document.getElementById('userDept').textContent = res.dept || '';
+
+  var box = document.getElementById('statusBox');
+  box.textContent = res.statusLabel || '—';
+  box.className = 'status ' + (res.status || '');
+
+  renderButtons(res.allowed || []);
+  renderToday(res.todayPunches || []);
+}
+
+function renderButtons(allowed) {
+  var wrap = document.getElementById('buttons');
+  wrap.innerHTML = '';
+
+  if (!allowed.length) {
+    var p = document.createElement('div');
+    p.className = 'today';
+    p.innerHTML = '<div class="empty" style="text-align:center;padding:10px 0">' +
+                  '本日の打刻は完了しています。おつかれさまでした。</div>';
+    wrap.appendChild(p);
+    return;
+  }
+
+  allowed.forEach(function (type) {
+    var def = BTN_DEF[type];
+    if (!def) return;
+    var b = document.createElement('button');
+    b.className = 'punch ' + def.cls;
+    b.textContent = def.label;
+    b.onclick = function () { punch(type); };
+    wrap.appendChild(b);
+  });
+}
+
+function renderToday(list) {
+  var ul = document.getElementById('todayList');
+  ul.innerHTML = '';
+  if (!list.length) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span class="empty">まだ打刻がありません</span>';
+    ul.appendChild(li);
+    return;
+  }
+  list.forEach(function (p) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span>' + esc(p.type) + '</span>' +
+                   '<span class="t">' + esc(p.time) + '</span>';
+    ul.appendChild(li);
+  });
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ---------- 打刻 ---------- */
+function punch(type) {
+  if (sending) return;          // 連打ガード①：フラグ
+  sending = true;
+  setButtonsEnabled(false);     // 連打ガード②：ボタン無効化
+  hideMsg();                    // ※サーバー側にもロックがある（ガード③）
+
+  api({
+    action: 'punch',
+    userId: userId,
+    displayName: displayName,
+    type: type
+  })
+  .then(function (res) {
+    if (!res.ok) {
+      // 画面とサーバーで状態がズレていた場合もここに来る
+      showMsg('err', res.error || '打刻できませんでした');
+      if (res.status) {
+        render({
+          name: document.getElementById('userName').textContent,
+          dept: document.getElementById('userDept').textContent,
+          status: res.status,
+          statusLabel: res.statusLabel,
+          allowed: res.allowed || [],
+          todayPunches: res.todayPunches || []
+        });
+      } else {
+        loadStatus();
+      }
+      return;
+    }
+
+    showMsg('ok', res.punchedType + ' を記録しました（' + res.punchedAt + '）');
+    if (res.warning) showMsg('warn', res.warning);
+
+    render({
+      name: document.getElementById('userName').textContent,
+      dept: document.getElementById('userDept').textContent,
+      status: res.status,
+      statusLabel: res.statusLabel,
+      allowed: res.allowed || [],
+      todayPunches: res.todayPunches || []
+    });
+  })
+  .catch(function (e) {
+    // ★成功表示を出さないことが重要。
+    //   「押したのに記録されていない」を防ぐため、失敗は必ず伝える
+    showMsg('err',
+      '打刻できませんでした。\n' + (e && e.message ? e.message : e) +
+      '\nもう一度押すか、記録されているか管理者に確認してください。');
+    loadStatus();
+  })
+  .then(function () {
+    sending = false;
+    setButtonsEnabled(true);
+  });
+}
+
+function setButtonsEnabled(on) {
+  var bs = document.querySelectorAll('button.punch');
+  for (var i = 0; i < bs.length; i++) bs[i].disabled = !on;
+}
+
+/* ---------- メッセージ ---------- */
+function showMsg(kind, text) {
+  var m = document.getElementById('msg');
+  m.className = 'msg show ' + kind;
+  m.textContent = text;
+}
+function hideMsg() {
+  document.getElementById('msg').className = 'msg';
+}
+</script>
+
+</body>
+</html>
