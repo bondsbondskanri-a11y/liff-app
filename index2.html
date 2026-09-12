@@ -820,6 +820,34 @@ document.getElementById('btnAttCancel').addEventListener('click', attClosePanel)
 document.getElementById('btnAttGeoRetry').addEventListener('click', attFetchGeo);
 document.getElementById('attAlcohol').addEventListener('input', attUpdateSubmit);
 
+// 保険：何らかの理由で状態が描かれないまま20秒たったら、
+// 「読み込み中」のまま放置せず、その場でやり直せるようにする。
+setTimeout(function () {
+  var box = document.getElementById('attStatusBox');
+  if (!box || attStatusNow !== null) return;     // すでに描けているなら何もしない
+  box.className = 'tc-status tc-status-err';
+  box.textContent = '状態を取得できませんでした。';
+  var wrap = document.getElementById('attButtons');
+  if (wrap && !wrap.querySelector('.tc-retry-big')) {
+    wrap.innerHTML = '';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tc-punch tc-retry-big';
+    b.style.background = '#6b7280';
+    b.style.fontSize = '18px';
+    b.style.letterSpacing = '1px';
+    b.style.minHeight = '60px';
+    b.textContent = 'もう一度読み込む';
+    b.onclick = function () {
+      box.className = 'tc-status tc-status-none';
+      box.textContent = '読み込み中…';
+      wrap.innerHTML = '';
+      refreshAttendanceBanner();
+    };
+    wrap.appendChild(b);
+  }
+}, 20000);
+
 (function(){
   const box = document.getElementById('bizTypeButtons');
   BUSINESS_TYPES.forEach(t => {
@@ -1131,6 +1159,7 @@ setTimeout(() => showLoading(false), 5000);
       userId = 'DEBUG_USER';
       displayName = 'デバッグユーザー（ブラウザ）';
       document.getElementById('userName').textContent = displayName;
+      await refreshAttendanceBanner();   // ここを呼ばないと「読み込み中」で固まる
       return;
     }
     const profile = await liff.getProfile();
@@ -1146,6 +1175,7 @@ setTimeout(() => showLoading(false), 5000);
     userId = 'DEBUG_USER';
     displayName = 'デバッグユーザー';
     document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
+    await refreshAttendanceBanner();     // ここを呼ばないと「読み込み中」で固まる
     checkAdminStatus().then(() => loadNotices());
     console.warn('LIFF init failed:', e);
   } finally {
@@ -1423,8 +1453,14 @@ async function loadAdminHistory() {
 // === 出退勤・業務 進行中バナー ===
 // 出退勤タブの状態を取り直して描き直す（起動時・タブ表示時・打刻直後）
 async function refreshAttendanceBanner() {
-  if (!userId) return;
   var box = document.getElementById('attStatusBox');
+  if (!userId) {
+    if (box) {
+      box.className = 'tc-status tc-status-err';
+      box.textContent = 'ユーザー情報を取得できませんでした。LINEアプリから開き直してください。';
+    }
+    return;
+  }
   try {
     const res = await apiPost({ action: 'attendance_status', userId: userId });
     attRender(res);
