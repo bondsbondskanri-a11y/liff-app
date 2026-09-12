@@ -95,11 +95,19 @@
   .tc-clock { text-align:center; padding:10px 0 14px; }
   .tc-date { font-size:14px; color:#6b7280; }
   .tc-time { font-size:44px; font-weight:700; letter-spacing:2px; line-height:1.1; color:#111827; font-variant-numeric:tabular-nums; }
-  .tc-status { text-align:center; font-size:16px; font-weight:700; padding:12px; border-radius:10px; margin-bottom:14px; }
+  .tc-status { text-align:center; font-size:23px; font-weight:700; line-height:1.3;
+               padding:16px 12px; border-radius:12px; margin-bottom:14px; }
+  .tc-sub      { font-size:16px; font-weight:700; margin-top:8px; }
+  .tc-sub-mini { font-size:12px; font-weight:400; margin-top:5px; opacity:0.75; }
+  .tc-sending  { display:inline-block; margin-top:10px; padding:8px 18px; border-radius:999px;
+                 background:#fef3c7; color:#92400e; font-size:18px; font-weight:700; }
+  .tc-failed   { display:inline-block; margin-top:10px; padding:10px 18px; border-radius:14px;
+                 background:#fee2e2; color:#b91c1c; font-size:17px; font-weight:700;
+                 line-height:1.4; white-space:pre-line; }
   .tc-status-none { background:#f3f4f6; color:#374151; }
   .tc-status-in   { background:#dcfce7; color:#15803d; }
   .tc-status-out  { background:#e5e7eb; color:#4b5563; }
-  .tc-status-err  { background:#fee2e2; color:#b91c1c; font-size:14px; }
+  .tc-status-err  { background:#fee2e2; color:#b91c1c; font-size:17px; }
   /* 何が入っても画面を埋めないための保険 */
   .tc-status { max-height:40vh; overflow:hidden; overflow-wrap:anywhere; }
   .tc-buttons { display:flex; flex-direction:column; gap:14px; }
@@ -778,18 +786,15 @@ function attRender(fromCache) {
   }
   box.textContent = label;
 
-  function sub(text) {
+  function sub(text, cls) {
     var d = document.createElement('div');
-    d.style.fontSize = '11px';
-    d.style.fontWeight = 'normal';
-    d.style.marginTop = '3px';
-    d.style.opacity = '0.8';
+    d.className = cls || 'tc-sub-mini';
     d.textContent = text;
     box.appendChild(d);
   }
-  if (attSendState === 'sending') sub('⏳ ' + attSendLabel + 'を送信中…');
-  else if (attSendState === 'failed') sub('⚠ 記録できませんでした。もう一度押してください');
-  if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中');
+  if (attSendState === 'sending') sub('⏳ ' + attSendLabel + 'を送信中…', 'tc-sending');
+  else if (attSendState === 'failed') sub('⚠ 記録できませんでした\nもう一度押してください', 'tc-failed');
+  if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中', 'tc-sub');
   else if (bizUnknown) sub('業務の状態を確認しています…');
   if (fromCache) sub('前回の内容を表示中・確認しています…');
 
