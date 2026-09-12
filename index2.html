@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社内LIFFアプリ</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { padding-bottom: 110px; }
+  .hidden-section { display:none !important; }
+  .loading-mask { position:fixed; inset:0; background:rgba(255,255,255,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .vsec-btn.active, .vsub-btn.active, .mst-btn.active { background:#dcfce7; border-color:#16a34a; color:#15803d; font-weight:600; }
+
+  /* === タブバー (2段) === */
+  .tab-nav {
+    background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%);
+    border-top: 2px solid #e5e7eb;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+  }
+  .tab-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px;
+    font-size: 11px;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    border-right: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb;
+    transition: all 0.15s;
+    position: relative;
+    min-height: 48px;
+    cursor: pointer;
+  }
+  .tab-btn:nth-child(4n) { border-right: none; }
+  .tab-btn:nth-last-child(-n+4):not(:nth-child(-n+4)):not(:nth-child(4n)) { border-bottom: none; }
+  .tab-btn-label {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .tab-btn:active {
+    background: #f3f4f6;
+    transform: scale(0.96);
+  }
+  .tab-btn.active {
+    color: #16a34a;
+    font-weight: 700;
+    background: linear-gradient(to bottom, #f0fdf4 0%, #dcfce7 100%);
+  }
+  .tab-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8%;
+    right: 8%;
+    height: 3px;
+    background: #16a34a;
+    border-radius: 0 0 3px 3px;
+  }
+
+  /* バッジ */
+  .tab-badge {
+    position: absolute;
+    top: 4px;
+    right: 12px;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+  /* admin tab の右下境界 */
+  #adminTabBtn { border-right: none; }
+
+  /* ===== 出退勤：タイムカード式 (index2) ===== */
+  .tc-clock { text-align:center; padding:10px 0 14px; }
+  .tc-date { font-size:14px; color:#6b7280; }
+  .tc-time { font-size:44px; font-weight:700; letter-spacing:2px; line-height:1.1; color:#111827; font-variant-numeric:tabular-nums; }
+  .tc-status { text-align:center; font-size:16px; font-weight:700; padding:12px; border-radius:10px; margin-bottom:14px; }
+  .tc-status-none { background:#f3f4f6; color:#374151; }
+  .tc-status-in   { background:#dcfce7; color:#15803d; }
+  .tc-status-out  { background:#e5e7eb; color:#4b5563; }
+  .tc-status-err  { background:#fee2e2; color:#b91c1c; font-size:14px; }
+  .tc-buttons { display:flex; flex-direction:column; gap:14px; }
+  .tc-punch { width:100%; min-height:88px; font-size:26px; font-weight:700; letter-spacing:4px;
+              border:none; border-radius:14px; color:#fff; box-shadow:0 3px 8px rgba(0,0,0,0.15); cursor:pointer; }
+  .tc-punch:active { transform:translateY(1px); box-shadow:0 1px 4px rgba(0,0,0,0.15); }
+  .tc-btn-in  { background:#16a34a; }
+  .tc-btn-out { background:#dc2626; }
+  .tc-done { text-align:center; color:#6b7280; font-size:14px; padding:22px 10px; background:#fff; border-radius:12px; }
+  .tc-panel { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.12); padding:16px; }
+  .tc-panel-title { font-size:17px; font-weight:700; margin-bottom:12px; text-align:center; }
+  .tc-geo { display:flex; align-items:center; justify-content:space-between; gap:8px;
+            font-size:13px; padding:10px 12px; border-radius:8px; background:#f9fafb; margin-bottom:14px; }
+  .tc-geo-wait { color:#b45309; }
+  .tc-geo-ok   { color:#15803d; font-weight:600; }
+  .tc-geo-ng   { color:#b91c1c; font-weight:600; }
+  .tc-retry { flex:none; font-size:12px; padding:5px 12px; border:1px solid #d1d5db; border-radius:6px; background:#fff; cursor:pointer; }
+  .tc-label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+  .tc-input { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:12px; font-size:22px; text-align:center; font-variant-numeric:tabular-nums; }
+  .tc-panel-actions { display:flex; gap:10px; margin-top:16px; }
+  .tc-cancel { flex:1; padding:14px; border:1px solid #d1d5db; border-radius:10px; background:#fff; font-size:15px; cursor:pointer; }
+  .tc-submit { flex:2; padding:14px; border:none; border-radius:10px; background:#16a34a; color:#fff; font-size:17px; font-weight:700; cursor:pointer; }
+  .tc-submit:disabled { background:#d1d5db; color:#9ca3af; cursor:not-allowed; }
+  .tc-today { margin-top:18px; background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  .tc-today-title { font-size:13px; font-weight:700; color:#6b7280; margin-bottom:8px; }
+  .tc-today ul { list-style:none; margin:0; padding:0; }
+  .tc-today li { display:flex; justify-content:space-between; padding:7px 2px; border-top:1px solid #f3f4f6; font-size:15px; }
+  .tc-today li:first-child { border-top:none; }
+  .tc-today li .t { font-weight:700; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<div id="loadingMask" class="loading-mask" style="display:none">
+  <div class="text-center">
+    <div class="animate-spin w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+    <p class="text-sm text-gray-600">読み込み中...</p>
+  </div>
+</div>
+
+<div id="confirmModal" class="loading-mask" style="display:none">
+  <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[85vh] flex flex-col">
+    <div class="p-4 border-b">
+      <h3 class="font-bold text-lg">送信内容の確認</h3>
+      <p class="text-xs text-gray-500 mt-1">この内容で間違いないでしょうか？</p>
+    </div>
+    <div id="confirmBody" class="p-4 overflow-y-auto text-sm flex-1"></div>
+    <div class="p-4 border-t flex gap-2">
+      <button id="btnConfirmCancel" class="flex-1 py-2 border rounded text-gray-700">キャンセル</button>
+      <button id="btnConfirmOk" class="flex-1 py-2 bg-green-600 text-white font-bold rounded">送信する</button>
+    </div>
+  </div>
+</div>
+
+<header class="bg-green-600 text-white p-4 shadow">
+  <h1 class="text-lg font-bold">社内LIFFアプリ</h1>
+  <p id="userName" class="text-xs opacity-90 mt-1">ユーザー情報取得中...</p>
+</header>
+
+<main class="p-4">
+  <div id="alert" class="hidden rounded p-3 mb-4 text-sm"></div>
+
+  <section id="tab-attendance" class="section">
+    <div class="tc-clock">
+      <div id="tcDate" class="tc-date">&nbsp;</div>
+      <div id="tcTime" class="tc-time">--:--</div>
+    </div>
+
+    <div id="attStatusBox" class="tc-status tc-status-none">読み込み中…</div>
+
+    <div id="attButtons" class="tc-buttons"></div>
+
+    <div id="attPanel" class="tc-panel hidden-section">
+      <div id="attPanelTitle" class="tc-panel-title"></div>
+      <div class="tc-geo">
+        <span id="attGeoText" class="tc-geo-wait">位置情報：取得中…</span>
+        <button type="button" id="btnAttGeoRetry" class="tc-retry hidden-section">再試行</button>
+      </div>
+      <label class="tc-label" for="attAlcohol">アルコール値（必須）</label>
+      <input type="number" step="0.01" min="0" inputmode="decimal" id="attAlcohol" class="tc-input" placeholder="0.00">
+      <div class="tc-panel-actions">
+        <button type="button" id="btnAttCancel" class="tc-cancel">やめる</button>
+        <button type="button" id="btnAttSubmit" class="tc-submit" disabled>記録する</button>
+      </div>
+    </div>
+
+    <div id="attTodayWrap" class="tc-today hidden-section">
+      <div class="tc-today-title">本日の記録</div>
+      <ul id="attTodayList"></ul>
+    </div>
+  </section>
+
+  <section id="tab-business" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">業務報告</h2>
+    <div id="bizStatusBanner" class="hidden-section mb-3 p-3 rounded shadow text-sm font-semibold"></div>
+    <div id="bizIdle" class="bg-white rounded shadow p-4 space-y-4">
+      <div><label class="block text-sm font-semibold mb-2">業務区分</label><div id="bizTypeButtons" class="grid grid-cols-2 gap-2"></div></div>
+      <div>
+        <label class="block text-sm font-semibold mb-2">位置情報</label>
+        <button type="button" id="btnBizStartGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
+        <p id="bizStartGeoText" class="text-xs text-gray-500 mt-1">未取得</p>
+      </div>
+      <button type="button" id="btnBizStart" class="w-full py-3 bg-green-600 text-white font-bold rounded">業務開始</button>
+    </div>
+    <div id="bizActive" class="bg-white rounded shadow p-4 space-y-4 hidden-section">
+      <div class="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-sm"><strong>進行中：</strong><span id="bizActiveType"></span></div>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btnBizDropoffMode" class="py-2 rounded border">立ち寄り</button>
+        <button type="button" id="btnBizEndMode" class="py-2 rounded border">終了</button>
+      </div>
+      <div id="bizActionForm" class="space-y-3">
+        <div>
+          <label class="block text-sm font-semibold mb-2">位置情報</label>
+          <button type="button" id="btnBizActionGeo" class="w-full py-2 bg-blue-500 text-white rounded">位置情報を取得</button>
+          <p id="bizActionGeoText" class="text-xs text-gray-500 mt-1">未取得</p>
+        </div>
+        <div id="bizEndContentBlock" class="hidden-section">
+          <label class="block text-sm font-semibold mb-2">業務内容</label>
+          <textarea id="bizEndContent" rows="4" class="w-full border rounded p-2" placeholder="業務の詳細"></textarea>
+        </div>
+        <button type="button" id="btnBizActionSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-vehicle" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">各種情報管理</h2>
+    <div class="bg-white rounded shadow p-2 mb-3">
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" data-vsec="op" class="vsec-btn active py-2 rounded border">業務操作</button>
+        <button type="button" data-vsec="mst" class="vsec-btn py-2 rounded border">マスター登録</button>
+      </div>
+    </div>
+    <div id="vSec-op" class="vSec">
+      <div class="bg-white rounded shadow p-4 space-y-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">車両選択</label>
+          <select id="vehicleSelect" class="w-full border rounded p-2"><option value="">-- 車両を選択 --</option></select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2">項目</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" data-vsub="condition" class="vsub-btn py-2 rounded border">車両状態</button>
+            <button type="button" data-vsub="refuel" class="vsub-btn py-2 rounded border">給油</button>
+            <button type="button" data-vsub="oil" class="vsub-btn py-2 rounded border">オイル交換</button>
+            <button type="button" data-vsub="photo" class="vsub-btn py-2 rounded border">車両写真</button>
+          </div>
+        </div>
+        <div id="vForm-refuel" class="vForm hidden-section space-y-3">
+          <div><label class="block text-sm font-semibold mb-1">給油量 (L)</label><input type="number" step="0.01" min="0" id="vRefuelLiter" class="w-full border rounded p-2" placeholder="例: 30.5"></div>
+          <div><label class="block text-sm font-semibold mb-1">金額 (円)</label><input type="number" step="1" min="0" id="vRefuelAmount" class="w-full border rounded p-2" placeholder="例: 4800"></div>
+          <div><label class="block text-sm font-semibold mb-1">走行距離 (km)</label><input type="number" step="1" min="0" id="vRefuelOdo" class="w-full border rounded p-2" placeholder="例: 54210"></div>
+        </div>
+        <div id="vForm-oil" class="vForm hidden-section space-y-3">
+          <div><label class="block text-sm font-semibold mb-1">実施時走行距離 (km)</label><input type="number" step="1" min="0" id="vOilOdo" class="w-full border rounded p-2" placeholder="例: 54210"></div>
+        </div>
+        <div id="vForm-condition" class="vForm hidden-section space-y-3">
+          <div>
+            <label class="block text-sm font-semibold mb-1">異常有無</label>
+            <div class="flex gap-2">
+              <label class="flex-1 border rounded p-2 text-center cursor-pointer"><input type="radio" name="vCondAbn" value="no" class="mr-1"> 異常なし</label>
+              <label class="flex-1 border rounded p-2 text-center cursor-pointer"><input type="radio" name="vCondAbn" value="yes" class="mr-1"> 異常あり</label>
+            </div>
+          </div>
+          <div><label class="block text-sm font-semibold mb-1">備考</label><textarea id="vCondNote" rows="3" class="w-full border rounded p-2"></textarea></div>
+          <div><label class="block text-sm font-semibold mb-1">車両写真（任意）</label><input type="file" id="vCondPhoto" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        </div>
+        <div id="vForm-photo" class="vForm hidden-section space-y-3">
+          <p class="text-xs text-gray-600">前・後・右前・左後の4方向を撮影します（任意）</p>
+          <div><label class="block text-sm font-semibold mb-1">前面</label><input type="file" id="vPhotoFront" accept="image/*" capture="environment" class="w-full text-sm"></div>
+          <div><label class="block text-sm font-semibold mb-1">背面</label><input type="file" id="vPhotoBack" accept="image/*" capture="environment" class="w-full text-sm"></div>
+          <div><label class="block text-sm font-semibold mb-1">右前</label><input type="file" id="vPhotoFrontRight" accept="image/*" capture="environment" class="w-full text-sm"></div>
+          <div><label class="block text-sm font-semibold mb-1">左後</label><input type="file" id="vPhotoBackLeft" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        </div>
+        <button type="button" id="btnVehicleSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+      </div>
+    </div>
+    <div id="vSec-mst" class="vSec hidden-section">
+      <div class="bg-white rounded shadow p-2 mb-3">
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" data-mst="employee" class="mst-btn py-2 rounded border">免許証登録</button>
+          <button type="button" data-mst="vehicle" class="mst-btn py-2 rounded border">車両登録</button>
+        </div>
+      </div>
+      <div id="mstForm-employee" class="mstForm hidden-section bg-white rounded shadow p-4 space-y-4">
+        <p class="text-xs text-gray-500">あなた自身を社員マスターに新規登録します</p>
+        <div><label class="block text-sm font-semibold mb-1">氏名 <span class="text-red-500">*</span></label><input type="text" id="mstEmpName" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">担当車両番号（任意）</label><input type="text" id="mstEmpVehicleId" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">免許証番号 <span class="text-red-500">*</span></label><input type="text" id="mstEmpLicNo" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">免許有効期限 <span class="text-red-500">*</span></label><input type="date" id="mstEmpLicExp" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">免許証写真（任意）</label><input type="file" id="mstEmpPhoto" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        <button type="button" id="btnMstEmpSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">登録</button>
+      </div>
+      <div id="mstForm-vehicle" class="mstForm hidden-section bg-white rounded shadow p-4 space-y-4">
+        <p class="text-xs text-gray-500">新しい車両を車両マスターに登録します</p>
+        <div><label class="block text-sm font-semibold mb-1">車両番号 <span class="text-red-500">*</span></label><input type="text" id="mstVehNo" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">車種（任意）</label><input type="text" id="mstVehType" class="w-full border rounded p-2"></div>
+        <div><label class="block text-sm font-semibold mb-1">車検有効期限（任意）</label><input type="date" id="mstVehExpiry" class="w-full border rounded p-2"></div>
+        <p class="text-xs text-gray-600 mt-2">車両写真（任意）</p>
+        <div><label class="block text-sm font-semibold mb-1">前面</label><input type="file" id="mstVehPhotoFront" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        <div><label class="block text-sm font-semibold mb-1">背面</label><input type="file" id="mstVehPhotoBack" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        <div><label class="block text-sm font-semibold mb-1">右前</label><input type="file" id="mstVehPhotoFrontRight" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        <div><label class="block text-sm font-semibold mb-1">左後</label><input type="file" id="mstVehPhotoBackLeft" accept="image/*" capture="environment" class="w-full text-sm"></div>
+        <button type="button" id="btnMstVehSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">登録</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-completion" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">完了報告</h2>
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <div><label class="block text-sm font-semibold mb-1">配送日付 <span class="text-red-500">*</span></label><input type="date" id="cmpDate" class="w-full border rounded p-2"></div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">案件番号 <span class="text-red-500">*</span></label>
+        <select id="cmpCaseNumber" class="w-full border rounded p-2">
+          <option value="">-- 選択 --</option>
+          <option>①</option><option>②</option><option>③</option><option>④</option><option>⑤</option><option>⑥</option><option>⑦</option>
+          <option>その他（定期案件や突発案件等）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">配送案件名 <span class="text-red-500">*</span></label>
+        <select id="cmpCaseName" class="w-full border rounded p-2">
+          <option value="">-- 選択 --</option>
+          <option>くるめし</option><option>スタフェス（スターフェスティバル）</option>
+          <option>弁当屋各種</option><option>チャカス</option><option>アクシスPJ</option><option>福島オーツー</option>
+          <option>和納</option><option>うなぎ食堂</option><option>ロジクエスト</option>
+          <option>ワールドビジョン</option><option>ハブ＆スポーク</option><option>サザキ（SZK）</option>
+          <option>グラファス</option><option>A3</option><option>ワイズエクスプレス</option>
+          <option>ストレート</option><option>JMADE（ローズギャラリー）</option><option>BCW</option>
+          <option>スパンコア</option><option>レクラーム</option><option>ハコビヤ</option>
+          <option>ハコベル</option><option>マルヘイ</option><option>ロジエージェント</option>
+          <option>埼京システムズ</option><option>ケーエー企画</option><option>コアプロエイム</option>
+          <option>フレッサ</option><option>アネックス</option><option>ボンズ</option>
+          <option>渓濱商事</option><option>K2カーゴ</option><option>ワークプランニング</option>
+          <option>その他</option>
+        </select>
+      </div>
+      <div><label class="block text-sm font-semibold mb-1">集荷完了時刻 <span class="text-red-500">*</span></label><input type="number" id="cmpPickupTime" class="w-full border rounded p-2" placeholder="例: 900"><p class="text-xs text-gray-500 mt-1">9:00→900の形式</p></div>
+      <div><label class="block text-sm font-semibold mb-1">納品完了時刻 <span class="text-red-500">*</span></label><input type="number" id="cmpDeliveryTime" class="w-full border rounded p-2" placeholder="例: 1500"><p class="text-xs text-gray-500 mt-1">15:00→1500の形式</p></div>
+      <div><label class="block text-sm font-semibold mb-1">距離 (km) <span class="text-red-500">*</span></label><input type="number" id="cmpDistance" class="w-full border rounded p-2" value="0"></div>
+      <div class="border-t pt-3">
+        <label class="block text-sm font-semibold mb-1">立替（高速代） <span class="text-red-500">*</span></label>
+        <input type="number" id="cmpExpHighway" class="w-full border rounded p-2" value="0">
+        <label class="block text-xs font-semibold mt-2 mb-1">領収書写真（複数可）</label>
+        <input type="file" id="cmpExpHighwayPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
+        <p id="cmpExpHighwayCount" class="text-xs text-gray-500 mt-1"></p>
+      </div>
+      <div class="border-t pt-3">
+        <label class="block text-sm font-semibold mb-1">立替（駐車場代） <span class="text-red-500">*</span></label>
+        <input type="number" id="cmpExpParking" class="w-full border rounded p-2" value="0">
+        <label class="block text-xs font-semibold mt-2 mb-1">領収書写真（複数可）</label>
+        <input type="file" id="cmpExpParkingPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
+        <p id="cmpExpParkingCount" class="text-xs text-gray-500 mt-1"></p>
+      </div>
+      <div class="border-t pt-3">
+        <label class="block text-sm font-semibold mb-1">立替（その他、ボンズ指示） <span class="text-red-500">*</span></label>
+        <input type="number" id="cmpExpOther" class="w-full border rounded p-2" value="0">
+        <label class="block text-xs font-semibold mt-2 mb-1">領収書写真（複数可）</label>
+        <input type="file" id="cmpExpOtherPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
+        <p id="cmpExpOtherCount" class="text-xs text-gray-500 mt-1"></p>
+      </div>
+      <div class="border-t pt-3"><label class="block text-sm font-semibold mb-1">備考</label><textarea id="cmpNote" rows="3" class="w-full border rounded p-2"></textarea></div>
+      <div><label class="block text-sm font-semibold mb-1">配送件数 <span class="text-red-500">*</span></label><input type="number" id="cmpDeliveryCount" class="w-full border rounded p-2" value="0"></div>
+      <div><label class="block text-sm font-semibold mb-1">代引き金額（合算） <span class="text-red-500">*</span></label><input type="number" id="cmpCodAmount" class="w-full border rounded p-2" value="0"></div>
+      <div class="border-t pt-3">
+        <label class="block text-sm font-semibold mb-1">受領書有無 <span class="text-red-500">*</span></label>
+        <div class="flex gap-2">
+          <label class="flex-1 border rounded p-2 text-center cursor-pointer"><input type="radio" name="cmpHasReceipt" value="無" class="mr-1"> 無</label>
+          <label class="flex-1 border rounded p-2 text-center cursor-pointer"><input type="radio" name="cmpHasReceipt" value="有" class="mr-1"> 有</label>
+        </div>
+        <div id="cmpReceiptPhotoBlock" class="hidden-section mt-3">
+          <label class="block text-xs font-semibold mb-1">受領書写真（複数可）</label>
+          <input type="file" id="cmpReceiptPhotos" accept="image/*" multiple capture="environment" class="w-full text-sm">
+          <p id="cmpReceiptPhotosCount" class="text-xs text-gray-500 mt-1"></p>
+        </div>
+      </div>
+      <button type="button" id="btnCompletionSubmit" class="w-full py-3 bg-green-600 text-white font-bold rounded">送信</button>
+    </div>
+    <div class="mt-4 bg-white rounded shadow p-4 space-y-3">
+      <h3 class="font-semibold text-sm border-b pb-2">📅 期間まとめてPDF出力（明細書形式）</h3>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">開始日</label>
+          <input type="date" id="periodStartDate" class="w-full border rounded p-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">終了日</label>
+          <input type="date" id="periodEndDate" class="w-full border rounded p-2 text-sm">
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" id="btnPeriodThisMonth" class="flex-1 py-1 text-xs border border-gray-300 rounded">今月</button>
+        <button type="button" id="btnPeriodLastMonth" class="flex-1 py-1 text-xs border border-gray-300 rounded">先月</button>
+      </div>
+      <button type="button" id="btnPeriodPdf" class="w-full py-3 bg-blue-600 text-white font-bold rounded">📄 PDF生成 + LINE送付</button>
+      <div id="periodPdfResult" class="hidden-section text-xs mt-2"></div>
+    </div>
+  </section>
+
+  <section id="tab-info" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">社内情報</h2>
+    <div class="bg-white rounded shadow p-4 space-y-4">
+      <div><h3 class="font-semibold text-sm mb-2">くるめし動態管理</h3><a href="https://kurumeshi.delivery/driver/login" target="_blank" rel="noopener" class="block w-full text-center py-3 bg-blue-500 text-white font-bold rounded">くるめし動態管理を開く</a></div>
+      <div><h3 class="font-semibold text-sm mb-2">社内お知らせ</h3><div class="text-sm text-gray-600 border rounded p-3 bg-gray-50">お知らせはありません。</div></div>
+    </div>
+  </section>
+
+  <section id="tab-notice" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">お知らせ</h2>
+    <div id="noticeList" class="space-y-2">
+      <div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>
+    </div>
+    <div id="noticeDetail" class="hidden-section bg-white rounded shadow p-4 space-y-3 mt-4">
+      <button id="btnNoticeBack" class="text-sm text-blue-600">← 一覧に戻る</button>
+      <div id="noticeDetailHeader" class="border-b pb-2"></div>
+      <div id="noticeDetailContent" class="text-sm whitespace-pre-wrap"></div>
+      <button id="btnNoticeConfirm" class="block w-full text-center py-3 bg-green-600 text-white font-bold rounded">確認しました</button>
+    </div>
+  </section>
+
+  <section id="tab-mypage" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">マイページ</h2>
+    <div id="myPageLoading" class="text-sm text-gray-500 text-center py-8">読み込み中...</div>
+    <div id="myPageView" class="hidden-section bg-white rounded shadow p-4 space-y-3">
+      <div><span class="text-xs text-gray-500">氏名</span><div id="mpName" class="text-base font-semibold"></div></div>
+      <div><span class="text-xs text-gray-500">担当車両番号</span><div id="mpVehicle" class="text-base"></div></div>
+      <div><span class="text-xs text-gray-500">免許証番号</span><div id="mpLicense" class="text-base"></div></div>
+      <div><span class="text-xs text-gray-500">免許有効期限</span><div id="mpLicenseExp" class="text-base"></div></div>
+      <div>
+        <span class="text-xs text-gray-500">免許証画像</span>
+        <div id="mpLicenseImgWrap" class="mt-1"><span class="text-sm text-gray-400">未登録</span></div>
+      </div>
+      <div>
+        <span class="text-xs text-gray-500">担当車両 最新写真</span>
+        <div id="mpVehiclePhotoWrap" class="mt-1"><span class="text-sm text-gray-400">未登録</span></div>
+      </div>
+      <button id="btnMyPageEdit" class="block w-full text-center py-3 bg-blue-600 text-white font-bold rounded">編集する</button>
+    </div>
+    <div id="myPageEdit" class="hidden-section bg-white rounded shadow p-4 space-y-3">
+      <h3 class="font-semibold text-sm border-b pb-2">プロフィール編集</h3>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">担当車両番号</label>
+        <input type="text" id="mpEditVehicle" class="w-full border rounded p-2" placeholder="例: 品川 100 あ 1234">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">免許証番号</label>
+        <input type="text" id="mpEditLicense" class="w-full border rounded p-2" placeholder="例: 1234 5678 9012">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">免許有効期限</label>
+        <input type="date" id="mpEditLicenseExp" class="w-full border rounded p-2">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">免許証画像</label>
+        <input type="file" id="mpEditLicenseImg" accept="image/*" capture="environment" class="w-full text-sm">
+        <p class="text-xs text-gray-500 mt-1">未選択ならそのまま</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">担当車両の写真</label>
+        <input type="file" id="mpEditVehiclePhoto" accept="image/*" capture="environment" class="w-full text-sm">
+        <p class="text-xs text-gray-500 mt-1">未選択ならそのまま</p>
+      </div>
+      <button id="btnMyPageSave" class="block w-full text-center py-3 bg-green-600 text-white font-bold rounded">保存する</button>
+      <button id="btnMyPageCancel" class="block w-full text-center py-2 border border-gray-300 rounded text-sm">キャンセル</button>
+    </div>
+  </section>
+
+  <section id="tab-admin" class="section hidden-section">
+    <h2 class="text-lg font-bold mb-3">管理者</h2>
+    <div class="bg-white rounded shadow p-4 space-y-3 mb-4">
+      <h3 class="font-semibold text-sm border-b pb-2">📝 新規お知らせ作成</h3>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">カテゴリ</label>
+        <select id="admCategory" class="w-full border rounded p-2">
+          <option value="お知らせ">お知らせ</option>
+          <option value="緊急">緊急</option>
+          <option value="個別連絡">個別連絡</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">宛先タイプ</label>
+        <select id="admRecipientType" class="w-full border rounded p-2">
+          <option value="全員">全員</option>
+          <option value="グループ">グループ選択</option>
+          <option value="個人">個人選択</option>
+        </select>
+      </div>
+      <div id="admGroupBlock" class="hidden-section">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">グループ</label>
+        <select id="admGroupSelect" class="w-full border rounded p-2"></select>
+      </div>
+      <div id="admPersonBlock" class="hidden-section">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">個人選択（複数選択可）</label>
+        <div id="admPersonList" class="border rounded p-2 max-h-40 overflow-y-auto space-y-1 text-sm"></div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">件名</label>
+        <input type="text" id="admSubject" class="w-full border rounded p-2" placeholder="例：明日休業のお知らせ">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">本文</label>
+        <textarea id="admContent" rows="5" class="w-full border rounded p-2" placeholder="本文を入力"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">有効期限</label>
+        <select id="admExpiry" class="w-full border rounded p-2">
+          <option value="0">期限なし</option>
+          <option value="5">5日</option>
+          <option value="10">10日</option>
+          <option value="30" selected>30日</option>
+          <option value="180">180日</option>
+        </select>
+      </div>
+      <button id="btnAdmCreateAndSend" class="block w-full text-center py-3 bg-green-600 text-white font-bold rounded">📤 即送信</button>
+      <button id="btnAdmCreateDraft" class="block w-full text-center py-2 border border-gray-300 rounded text-sm">下書き保存</button>
+    </div>
+    <div class="bg-white rounded shadow p-4 space-y-3">
+      <h3 class="font-semibold text-sm border-b pb-2">📋 送信履歴</h3>
+      <div id="admHistoryList" class="space-y-2 text-sm"></div>
+    </div>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 left-0 right-0 tab-nav grid grid-cols-4">
+  <button data-tab="attendance" class="tab-btn active">
+    <span class="tab-btn-label">出退勤</span>
+  </button>
+  <button data-tab="business" class="tab-btn">
+    <span class="tab-btn-label">業務</span>
+  </button>
+  <button data-tab="vehicle" class="tab-btn">
+    <span class="tab-btn-label">情報管理</span>
+  </button>
+  <button data-tab="completion" class="tab-btn">
+    <span class="tab-btn-label">完了報告</span>
+  </button>
+  <button data-tab="notice" class="tab-btn">
+    <span class="tab-btn-label">お知らせ</span>
+    <span id="noticeBadge" class="tab-badge hidden-section">0</span>
+  </button>
+  <button data-tab="info" class="tab-btn">
+    <span class="tab-btn-label">社内情報</span>
+  </button>
+  <button data-tab="mypage" class="tab-btn">
+    <span class="tab-btn-label">マイページ</span>
+  </button>
+  <button data-tab="admin" class="tab-btn hidden-section" id="adminTabBtn">
+    <span class="tab-btn-label">管理者</span>
+  </button>
+</nav>
+
+<script>
+const LIFF_ID = '2009892557-Iki3540A';
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwiEXWmwwhkdy8toQ_QnCHGeaxBdOZ6UqBHeyuf0WHza61E48OPGjJvYVWucoWxihBtAA/exec';
+const BUSINESS_TYPES = ['案件業務', '営業業務', '事務業務', '移動業務'];
+let userId = '', displayName = '';
+let attType = null, attGeo = null;
+let bizStartType = null, bizStartGeo = null, bizActionMode = null, bizActionGeo = null;
+let vehicleSubType = null, mstMode = null;
+
+async function apiPost(payload) {
+  if (displayName && !payload.displayName) payload.displayName = displayName;
+  const res = await fetch(GAS_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+  const text = await res.text();
+  try { return JSON.parse(text); } catch (_) { return { ok: false, error: 'invalid response: ' + text }; }
+}
+function showLoading(b) { document.getElementById('loadingMask').style.display = b ? 'flex' : 'none'; }
+function showAlert(type, msg) {
+  const el = document.getElementById('alert');
+  el.className = 'rounded p-3 mb-4 text-sm ' + (type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 4000);
+}
+function getGeo() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('位置情報非対応'));
+    navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), e => reject(e), { enableHighAccuracy: true, timeout: 10000 });
+  });
+}
+function fileToCompressedDataURL(file, maxWidth = 1280, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('画像読み込み失敗'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
+    reader.readAsDataURL(file);
+  });
+}
+async function fileInputToDataURL(id) {
+  const f = document.getElementById(id).files[0];
+  if (!f) return '';
+  return await fileToCompressedDataURL(f);
+}
+async function fileArrayToDataUrls(id) {
+  const files = Array.from(document.getElementById(id).files || []);
+  return await Promise.all(files.map(f => fileToCompressedDataURL(f)));
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.section').forEach(el => el.classList.toggle('hidden-section', el.id !== 'tab-' + name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  if (name === 'business') loadBusinessStatus();
+  if (name === 'vehicle') loadVehicleList();
+}
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+/* ================= 出退勤（タイムカード式） =================
+   方針（timecard_liff.html と同じ）:
+   - 状態はサーバーが持つ。画面側で状態を推測しない
+   - 押せるボタンだけを描く
+   - 送信直後は必ずサーバーの最新状態を取り直して描き直す
+   位置情報は自動取得。ただし当社の運用では必須のため、
+   取れないときは送信させず「再試行」を出す。
+============================================================ */
+var ATT_DEF = {
+  'in':  { label: '出\u3000勤', cls: 'tc-btn-in',  panel: '出勤を記録します' },
+  'out': { label: '退\u3000勤', cls: 'tc-btn-out', panel: '退勤を記録します' }
+};
+var ATT_GEO_TIMEOUT_MS = 12000;
+var attStatusNow = null;   // サーバーが返した最新状態
+var attPending   = null;   // 'in' | 'out'（パネルを開いている対象）
+var attGeoVal    = null;
+var attGeoOk     = false;
+var attSending   = false;
+
+/* ---------- 時計 ---------- */
+(function attStartClock() {
+  function p2(n) { return ('0' + n).slice(-2); }
+  function tick() {
+    var n = new Date();
+    var w = ['日','月','火','水','木','金','土'][n.getDay()];
+    var d = document.getElementById('tcDate');
+    var t = document.getElementById('tcTime');
+    if (d) d.textContent = (n.getMonth() + 1) + '月' + n.getDate() + '日（' + w + '）';
+    if (t) t.textContent = p2(n.getHours()) + ':' + p2(n.getMinutes());
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
+function attHm(v) {
+  var t = String(v == null ? '' : v).split(' ')[1] || '';
+  return t.substring(0, 5);
+}
+
+/* ---------- 描画：サーバーの状態だけを見る ---------- */
+function attRender(res) {
+  var box  = document.getElementById('attStatusBox');
+  var wrap = document.getElementById('attButtons');
+  var today = document.getElementById('attTodayWrap');
+  var list  = document.getElementById('attTodayList');
+  if (!box || !wrap) return;
+
+  var status = (res && res.ok) ? (res.status || 'none') : 'none';
+  attStatusNow = status;
+
+  var allowed = [];
+  if (status === 'in') {
+    box.className = 'tc-status tc-status-in';
+    box.textContent = '出勤中（' + attHm(res.clockInTime) + ' 〜）';
+    allowed = ['out'];
+  } else if (status === 'out') {
+    box.className = 'tc-status tc-status-out';
+    box.textContent = '本日退勤済み';
+    allowed = [];
+  } else {
+    box.className = 'tc-status tc-status-none';
+    box.textContent = '未出勤';
+    allowed = ['in'];
+  }
+
+  // 本日の記録
+  if (list && today) {
+    list.innerHTML = '';
+    var rows = [];
+    if (res && res.clockInTime)  rows.push(['出勤', attHm(res.clockInTime)]);
+    if (res && res.clockOutTime) rows.push(['退勤', attHm(res.clockOutTime)]);
+    rows.forEach(function (r) {
+      var li = document.createElement('li');
+      var s1 = document.createElement('span'); s1.textContent = r[0];
+      var s2 = document.createElement('span'); s2.className = 't'; s2.textContent = r[1];
+      li.appendChild(s1); li.appendChild(s2); list.appendChild(li);
+    });
+    today.classList.toggle('hidden-section', rows.length === 0);
+  }
+
+  // 押せるボタンだけ描く
+  wrap.innerHTML = '';
+  if (!allowed.length) {
+    var p = document.createElement('div');
+    p.className = 'tc-done';
+    p.textContent = '本日の打刻は完了しています。おつかれさまでした。';
+    wrap.appendChild(p);
+    return;
+  }
+  allowed.forEach(function (type) {
+    var def = ATT_DEF[type];
+    if (!def) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tc-punch ' + def.cls;
+    btn.textContent = def.label;
+    btn.onclick = function () { attOpenPanel(type); };
+    wrap.appendChild(btn);
+  });
+}
+
+/* ---------- 入力パネル ---------- */
+function attOpenPanel(type) {
+  if (!ATT_DEF[type]) return;
+  attPending = type;
+  document.getElementById('attPanelTitle').textContent = ATT_DEF[type].panel;
+  document.getElementById('attAlcohol').value = '';
+  document.getElementById('attPanel').classList.remove('hidden-section');
+  document.getElementById('attButtons').classList.add('hidden-section');
+  attFetchGeo();                       // 位置情報は裏で取る。その間に値を入力できる
+  try { document.getElementById('attAlcohol').focus(); } catch (_) {}
+}
+function attClosePanel() {
+  attPending = null; attGeoVal = null; attGeoOk = false;
+  document.getElementById('attPanel').classList.add('hidden-section');
+  document.getElementById('attButtons').classList.remove('hidden-section');
+}
+
+/* ---------- 位置情報（自動取得・必須） ---------- */
+function attFetchGeo() {
+  var txt   = document.getElementById('attGeoText');
+  var retry = document.getElementById('btnAttGeoRetry');
+  attGeoOk = false; attGeoVal = null;
+  retry.classList.add('hidden-section');
+  txt.className = 'tc-geo-wait';
+  txt.textContent = '位置情報：取得中…';
+  attUpdateSubmit();
+
+  if (!navigator.geolocation) { attGeoFail('この端末は位置情報に対応していません'); return; }
+
+  var done = false;
+  var timer = setTimeout(function () {
+    if (done) return; done = true;
+    attGeoFail('タイムアウト');
+  }, ATT_GEO_TIMEOUT_MS);
+
+  navigator.geolocation.getCurrentPosition(
+    function (pos) {
+      if (done) return; done = true; clearTimeout(timer);
+      attGeoVal = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      attGeoOk = true;
+      txt.className = 'tc-geo-ok';
+      txt.textContent = '位置情報：取得済 ✓';
+      attUpdateSubmit();
+    },
+    function (err) {
+      if (done) return; done = true; clearTimeout(timer);
+      var msg = '取得できません';
+      if (err && err.code === 1) msg = '許可されていません';
+      else if (err && err.code === 2) msg = '電波・GPSが届きません';
+      else if (err && err.code === 3) msg = 'タイムアウト';
+      attGeoFail(msg);
+    },
+    { enableHighAccuracy: true, timeout: ATT_GEO_TIMEOUT_MS, maximumAge: 60000 }
+  );
+}
+function attGeoFail(msg) {
+  var txt = document.getElementById('attGeoText');
+  txt.className = 'tc-geo-ng';
+  txt.textContent = '位置情報：' + msg;
+  document.getElementById('btnAttGeoRetry').classList.remove('hidden-section');
+  attUpdateSubmit();
+}
+
+/* ---------- 送信可否 ---------- */
+function attUpdateSubmit() {
+  var el = document.getElementById('attAlcohol');
+  var btn = document.getElementById('btnAttSubmit');
+  if (!el || !btn) return;
+  var v = el.value;
+  btn.disabled = !(attGeoOk && v !== '' && !isNaN(Number(v)) && !attSending);
+}
+
+/* ---------- 送信 ---------- */
+async function attSubmit() {
+  if (attSending || !attPending) return;               // 連打ガード
+  var v = document.getElementById('attAlcohol').value;
+  if (!attGeoOk || !attGeoVal) return showAlert('error', '位置情報が取得できていません');
+  if (v === '' || isNaN(Number(v))) return showAlert('error', 'アルコール値を入力してください');
+
+  var type = attPending;
+  attSending = true; attUpdateSubmit(); showLoading(true);
+  try {
+    const res = await apiPost({
+      action: 'attendance', userId: userId, type: type,
+      lat: attGeoVal.lat, lng: attGeoVal.lng, alcohol: Number(v)
+    });
+    if (!res || !res.ok) { showAlert('error', (res && res.error) || '送信に失敗しました'); return; }
+    showAlert('ok', (type === 'in' ? '出勤' : '退勤') + 'を記録しました');
+    attClosePanel();
+  } catch (e) {
+    showAlert('error', '通信に失敗しました: ' + (e && e.message ? e.message : e));
+    return;
+  } finally {
+    attSending = false; showLoading(false); attUpdateSubmit();
+  }
+  // 画面側で推測せず、サーバーの最新状態で描き直す
+  await refreshAttendanceBanner();
+}
+
+document.getElementById('btnAttSubmit').addEventListener('click', attSubmit);
+document.getElementById('btnAttCancel').addEventListener('click', attClosePanel);
+document.getElementById('btnAttGeoRetry').addEventListener('click', attFetchGeo);
+document.getElementById('attAlcohol').addEventListener('input', attUpdateSubmit);
+
+(function(){
+  const box = document.getElementById('bizTypeButtons');
+  BUSINESS_TYPES.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = t; b.className = 'py-2 rounded border';
+    b.addEventListener('click', () => {
+      bizStartType = t;
+      document.querySelectorAll('#bizTypeButtons button').forEach(x => x.classList.toggle('bg-green-100', x === b));
+    });
+    box.appendChild(b);
+  });
+})();
+document.getElementById('btnBizStartGeo').addEventListener('click', async () => {
+  try { showLoading(true); bizStartGeo = await getGeo(); document.getElementById('bizStartGeoText').textContent = '取得済'; }
+  catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); } finally { showLoading(false); }
+});
+document.getElementById('btnBizStart').addEventListener('click', async () => {
+  if (!bizStartType) return showAlert('error', '業務区分を選択してください');
+  if (!bizStartGeo) return showAlert('error', '位置情報を取得してください');
+  const btn = document.getElementById('btnBizStart');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost({ action: 'business_report', userId, status: 'start', businessType: bizStartType, lat: bizStartGeo.lat, lng: bizStartGeo.lng });
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', '業務を開始しました');
+  loadBusinessStatus();
+});
+document.getElementById('btnBizDropoffMode').addEventListener('click', () => {
+  bizActionMode = 'dropoff';
+  document.getElementById('btnBizDropoffMode').classList.add('bg-green-100');
+  document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
+  document.getElementById('bizEndContentBlock').classList.add('hidden-section');
+});
+document.getElementById('btnBizEndMode').addEventListener('click', () => {
+  bizActionMode = 'end';
+  document.getElementById('btnBizEndMode').classList.add('bg-green-100');
+  document.getElementById('btnBizDropoffMode').classList.remove('bg-green-100');
+  document.getElementById('bizEndContentBlock').classList.remove('hidden-section');
+});
+document.getElementById('btnBizActionGeo').addEventListener('click', async () => {
+  try { showLoading(true); bizActionGeo = await getGeo(); document.getElementById('bizActionGeoText').textContent = '取得済'; }
+  catch (e) { showAlert('error', '位置情報取得失敗: ' + e.message); } finally { showLoading(false); }
+});
+document.getElementById('btnBizActionSubmit').addEventListener('click', async () => {
+  if (!bizActionMode) return showAlert('error', '「立ち寄り」または「終了」を選択');
+  if (!bizActionGeo) return showAlert('error', '位置情報を取得してください');
+  const payload = { action: 'business_report', userId, status: bizActionMode, lat: bizActionGeo.lat, lng: bizActionGeo.lng };
+  if (bizActionMode === 'end') {
+    const content = document.getElementById('bizEndContent').value.trim();
+    if (!content) return showAlert('error', '業務内容を入力してください');
+    payload.content = content;
+  }
+  const btn = document.getElementById('btnBizActionSubmit');
+  btn.disabled = true; showLoading(true);
+  const res = await apiPost(payload);
+  showLoading(false); btn.disabled = false;
+  if (!res.ok) return showAlert('error', res.error || '送信失敗');
+  showAlert('ok', bizActionMode === 'end' ? '業務を終了しました' : '立ち寄りを記録しました');
+  if (bizActionMode === 'end') loadBusinessStatus();
+});
+async function loadBusinessStatus() {
+  if (!userId) return;
+  showLoading(true);
+  const res = await apiPost({ action: 'business_status', userId });
+  showLoading(false);
+  const idle = document.getElementById('bizIdle'), active = document.getElementById('bizActive');
+  if (res.ok && res.status === 'in_progress') {
+    idle.classList.add('hidden-section'); active.classList.remove('hidden-section');
+    document.getElementById('bizActiveType').textContent = res.businessType || '';
+  } else { idle.classList.remove('hidden-section'); active.classList.add('hidden-section'); }
+  bizActionMode = null; bizActionGeo = null;
+  document.getElementById('bizActionGeoText').textContent = '未取得';
+  document.getElementById('bizEndContent').value = '';
+  document.getElementById('bizEndContentBlock').classList.add('hidden-section');
+  document.getElementById('btnBizDropoffMode').classList.remove('bg-green-100');
+  document.getElementById('btnBizEndMode').classList.remove('bg-green-100');
+}
+
+document.querySelectorAll('.vsec-btn').forEach(btn => btn.addEventListener('click', () => {
+  const sec = btn.dataset.vsec;
+  document.querySelectorAll('.vsec-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.vSec').forEach(s => s.classList.toggle('hidden-section', s.id !== 'vSec-' + sec));
+}));
+async function loadVehicleList() {
+  const sel = document.getElementById('vehicleSelect');
+  if (sel.options.length > 1) return;
+  showLoading(true);
+  const res = await apiPost({ action: 'vehicle_list' });
+  showLoading(false);
+  if (res.ok && Array.isArray(res.vehicles)) {
+    res.vehicles.forEach(v => { const o = document.createElement('option'); o.value = v.id; o.textContent = v.label; sel.appendChild(o); });
+  }
+}
+document.querySelectorAll('.vsub-btn').forEach(btn => btn.addEventListener('click', () => {
+  vehicleSubType = btn.dataset.vsub;
+  document.querySelectorAll('.vsub-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.vForm').forEach(f => f.classList.toggle('hidden-section', f.id !== 'vForm-' + vehicleSubType));
+}));
+document.getElementById('btnVehicleSubmit').addEventListener('click', async () => {
+  const vehicleId = document.getElementById('vehicleSelect').value;
+  if (!vehicleId) return showAlert('error', '車両を選択してください');
+  if (!vehicleSubType) return showAlert('error', '項目を選択してください');
+  const payload = { action: 'vehicle', userId, subType: vehicleSubType, vehicleId };
+  const btn = document.getElementById('btnVehicleSubmit');
+  try {
+    btn.disabled = true; showLoading(true);
+    if (vehicleSubType === 'refuel') {
+      const liter = document.getElementById('vRefuelLiter').value, amount = document.getElementById('vRefuelAmount').value, odo = document.getElementById('vRefuelOdo').value;
+      if (liter === '' || amount === '' || odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '給油量・金額・走行距離を入力'); }
+      payload.liter = Number(liter); payload.amount = Number(amount); payload.odo = Number(odo);
+    } else if (vehicleSubType === 'oil') {
+      const odo = document.getElementById('vOilOdo').value;
+      if (odo === '') { showLoading(false); btn.disabled = false; return showAlert('error', '走行距離を入力'); }
+      payload.odo = Number(odo);
+    } else if (vehicleSubType === 'condition') {
+      const sel = document.querySelector('input[name="vCondAbn"]:checked');
+      if (!sel) { showLoading(false); btn.disabled = false; return showAlert('error', '異常有無を選択'); }
+      payload.abnormal = sel.value;
+      payload.note = document.getElementById('vCondNote').value.trim();
+      payload.photo = await fileInputToDataURL('vCondPhoto');
+    } else if (vehicleSubType === 'photo') {
+      payload.photoFront = await fileInputToDataURL('vPhotoFront');
+      payload.photoBack = await fileInputToDataURL('vPhotoBack');
+      payload.photoFrontRight = await fileInputToDataURL('vPhotoFrontRight');
+      payload.photoBackLeft = await fileInputToDataURL('vPhotoBackLeft');
+      if (!payload.photoFront && !payload.photoBack && !payload.photoFrontRight && !payload.photoBackLeft) {
+        showLoading(false); btn.disabled = false; return showAlert('error', '少なくとも1枚は写真を選択');
+      }
+    }
+    const res = await apiPost(payload);
+    showLoading(false); btn.disabled = false;
+    if (!res.ok) return showAlert('error', res.error || '送信失敗');
+    showAlert('ok', '送信しました');
+    document.querySelectorAll('#vSec-op input').forEach(i => { if (i.type === 'radio') i.checked = false; else i.value = ''; });
+    document.getElementById('vCondNote').value = '';
+  } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+});
+
+document.querySelectorAll('.mst-btn').forEach(btn => btn.addEventListener('click', () => {
+  mstMode = btn.dataset.mst;
+  document.querySelectorAll('.mst-btn').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.mstForm').forEach(f => f.classList.toggle('hidden-section', f.id !== 'mstForm-' + mstMode));
+}));
+document.getElementById('btnMstEmpSubmit').addEventListener('click', async () => {
+  const name = document.getElementById('mstEmpName').value.trim();
+  const licNo = document.getElementById('mstEmpLicNo').value.trim();
+  const licExp = document.getElementById('mstEmpLicExp').value.trim();
+  const vehicleId = document.getElementById('mstEmpVehicleId').value.trim();
+  if (!name) return showAlert('error', '氏名を入力');
+  if (!licNo) return showAlert('error', '免許証番号を入力');
+  if (!licExp) return showAlert('error', '免許有効期限を選択');
+  const btn = document.getElementById('btnMstEmpSubmit');
+  try {
+    btn.disabled = true; showLoading(true);
+    const photo = await fileInputToDataURL('mstEmpPhoto');
+    const res = await apiPost({ action: 'register_employee', userId, name, licenseNumber: licNo, licenseExpiry: licExp, vehicleId, licensePhoto: photo });
+    showLoading(false); btn.disabled = false;
+    if (!res.ok) return showAlert('error', res.error || '登録失敗');
+    showAlert('ok', '社員登録しました');
+    document.querySelectorAll('#mstForm-employee input').forEach(i => i.value = '');
+  } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+});
+document.getElementById('btnMstVehSubmit').addEventListener('click', async () => {
+  const vehicleNo = document.getElementById('mstVehNo').value.trim();
+  const vehicleType = document.getElementById('mstVehType').value.trim();
+  const expiry = document.getElementById('mstVehExpiry').value.trim();
+  if (!vehicleNo) return showAlert('error', '車両番号を入力');
+  const btn = document.getElementById('btnMstVehSubmit');
+  try {
+    btn.disabled = true; showLoading(true);
+    const photoFront = await fileInputToDataURL('mstVehPhotoFront');
+    const photoBack = await fileInputToDataURL('mstVehPhotoBack');
+    const photoFrontRight = await fileInputToDataURL('mstVehPhotoFrontRight');
+    const photoBackLeft = await fileInputToDataURL('mstVehPhotoBackLeft');
+    const res = await apiPost({ action: 'register_vehicle', userId, vehicleNo, vehicleType, expiry, photoFront, photoBack, photoFrontRight, photoBackLeft });
+    showLoading(false); btn.disabled = false;
+    if (!res.ok) return showAlert('error', res.error || '登録失敗');
+    showAlert('ok', '車両登録しました');
+    document.querySelectorAll('#mstForm-vehicle input').forEach(i => i.value = '');
+    const sel = document.getElementById('vehicleSelect');
+    while (sel.options.length > 1) sel.remove(1);
+  } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+});
+
+['cmpExpHighwayPhotos', 'cmpExpParkingPhotos', 'cmpExpOtherPhotos', 'cmpReceiptPhotos'].forEach(id => {
+  const cnt = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos', 'Count');
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => {
+    const n = el.files.length;
+    document.getElementById(cnt).textContent = n > 0 ? n + '枚 選択中' : '';
+  });
+});
+document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.addEventListener('change', () => {
+  const v = document.querySelector('input[name="cmpHasReceipt"]:checked')?.value;
+  document.getElementById('cmpReceiptPhotoBlock').classList.toggle('hidden-section', v !== '有');
+}));
+
+function showConfirmModal(rows, onOk) {
+  const body = document.getElementById('confirmBody');
+  body.innerHTML = '';
+  rows.forEach(([k, v]) => {
+    const div = document.createElement('div');
+    div.className = 'flex border-b py-1';
+    const key = document.createElement('div');
+    key.className = 'w-32 text-gray-600 flex-shrink-0';
+    key.textContent = k;
+    const val = document.createElement('div');
+    val.className = 'flex-1 break-words';
+    val.textContent = (v === '' || v == null) ? '(なし)' : v;
+    div.appendChild(key); div.appendChild(val);
+    body.appendChild(div);
+  });
+  document.getElementById('confirmModal').style.display = 'flex';
+  const okBtn = document.getElementById('btnConfirmOk');
+  const cancelBtn = document.getElementById('btnConfirmCancel');
+  const cleanup = () => {
+    document.getElementById('confirmModal').style.display = 'none';
+    okBtn.onclick = null; cancelBtn.onclick = null;
+  };
+  okBtn.onclick = () => { cleanup(); onOk(); };
+  cancelBtn.onclick = cleanup;
+}
+
+document.getElementById('btnCompletionSubmit').addEventListener('click', async () => {
+  const date = document.getElementById('cmpDate').value;
+  const caseNumber = document.getElementById('cmpCaseNumber').value;
+  const caseName = document.getElementById('cmpCaseName').value;
+  const pickup = document.getElementById('cmpPickupTime').value;
+  const delivery = document.getElementById('cmpDeliveryTime').value;
+  const distance = document.getElementById('cmpDistance').value;
+  const expHighway = document.getElementById('cmpExpHighway').value;
+  const expParking = document.getElementById('cmpExpParking').value;
+  const expOther = document.getElementById('cmpExpOther').value;
+  const note = document.getElementById('cmpNote').value.trim();
+  const deliveryCount = document.getElementById('cmpDeliveryCount').value;
+  const codAmount = document.getElementById('cmpCodAmount').value;
+  const hasReceipt = document.querySelector('input[name="cmpHasReceipt"]:checked')?.value;
+  if (!date) return showAlert('error', '配送日付を選択');
+  if (!caseNumber) return showAlert('error', '案件番号を選択');
+  if (!caseName) return showAlert('error', '配送案件名を選択');
+  if (!pickup) return showAlert('error', '集荷完了時刻を入力');
+  if (!delivery) return showAlert('error', '納品完了時刻を入力');
+  if (!hasReceipt) return showAlert('error', '受領書有無を選択');
+  const cnt = id => (document.getElementById(id).files || []).length;
+  const hPhotos = cnt('cmpExpHighwayPhotos'), pPhotos = cnt('cmpExpParkingPhotos'), oPhotos = cnt('cmpExpOtherPhotos');
+  const rPhotos = hasReceipt === '有' ? cnt('cmpReceiptPhotos') : 0;
+  const summary = [
+    ['氏名', displayName],
+    ['配送日付', date],
+    ['案件番号', caseNumber],
+    ['配送案件名', caseName],
+    ['集荷完了時刻', pickup],
+    ['納品完了時刻', delivery],
+    ['距離 (km)', distance],
+    ['立替（高速代）', expHighway + ' 円 / 写真' + hPhotos + '枚'],
+    ['立替（駐車場代）', expParking + ' 円 / 写真' + pPhotos + '枚'],
+    ['立替（その他）', expOther + ' 円 / 写真' + oPhotos + '枚'],
+    ['備考', note || '(なし)'],
+    ['配送件数', deliveryCount],
+    ['代引き金額', codAmount + ' 円'],
+    ['受領書有無', hasReceipt + (hasReceipt === '有' ? ' / 写真' + rPhotos + '枚' : '')]
+  ];
+  showConfirmModal(summary, async () => {
+    const btn = document.getElementById('btnCompletionSubmit');
+    try {
+      btn.disabled = true; showLoading(true);
+      const expHighwayPhotos = await fileArrayToDataUrls('cmpExpHighwayPhotos');
+      const expParkingPhotos = await fileArrayToDataUrls('cmpExpParkingPhotos');
+      const expOtherPhotos = await fileArrayToDataUrls('cmpExpOtherPhotos');
+      const receiptPhotos = hasReceipt === '有' ? await fileArrayToDataUrls('cmpReceiptPhotos') : [];
+      const res = await apiPost({
+        action: 'completion', userId,
+        deliveryDate: date, caseNumber, caseName,
+        pickupTime: pickup, deliveryTime: delivery,
+        distance: Number(distance) || 0,
+        expHighway: Number(expHighway) || 0, expHighwayPhotos,
+        expParking: Number(expParking) || 0, expParkingPhotos,
+        expOther: Number(expOther) || 0, expOtherPhotos,
+        note,
+        deliveryCount: Number(deliveryCount) || 0,
+        codAmount: Number(codAmount) || 0,
+        hasReceipt, receiptPhotos
+      });
+      showLoading(false); btn.disabled = false;
+      if (!res.ok) return showAlert('error', res.error || '送信失敗');
+      showAlert('ok', '送信しました');
+      ['cmpDistance', 'cmpExpHighway', 'cmpExpParking', 'cmpExpOther', 'cmpDeliveryCount', 'cmpCodAmount'].forEach(id => document.getElementById(id).value = '0');
+      ['cmpPickupTime', 'cmpDeliveryTime'].forEach(id => document.getElementById(id).value = '');
+      ['cmpCaseNumber', 'cmpCaseName'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('cmpNote').value = '';
+      ['cmpExpHighwayPhotos', 'cmpExpParkingPhotos', 'cmpExpOtherPhotos', 'cmpReceiptPhotos'].forEach(id => {
+        document.getElementById(id).value = '';
+        const c = id === 'cmpReceiptPhotos' ? 'cmpReceiptPhotosCount' : id.replace('Photos', 'Count');
+        document.getElementById(c).textContent = '';
+      });
+      document.querySelectorAll('input[name="cmpHasReceipt"]').forEach(r => r.checked = false);
+      document.getElementById('cmpReceiptPhotoBlock').classList.add('hidden-section');
+      document.getElementById('cmpDate').valueAsDate = new Date();
+    } catch (e) { showLoading(false); btn.disabled = false; showAlert('error', '処理失敗: ' + e.message); }
+  });
+});
+
+setTimeout(() => showLoading(false), 5000);
+(async function initLiff() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) {
+      if (liff.isInClient && liff.isInClient()) { liff.login(); return; }
+      userId = 'DEBUG_USER';
+      displayName = 'デバッグユーザー（ブラウザ）';
+      document.getElementById('userName').textContent = displayName;
+      return;
+    }
+    const profile = await liff.getProfile();
+    userId = profile.userId;
+    displayName = profile.displayName;
+    document.getElementById('userName').textContent = displayName + ' さん';
+    // GAS は同一ユーザーの同時実行を直列化するため、起動時に何本も投げると
+    // 「本数 x 1〜3秒」そのまま待たされる。まず出退勤の状態だけを取る。
+    await refreshAttendanceBanner();
+    // 画面が使える状態になってから、残りを後追いで取る
+    checkAdminStatus().then(() => loadNotices());
+  } catch (e) {
+    userId = 'DEBUG_USER';
+    displayName = 'デバッグユーザー';
+    document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
+    checkAdminStatus().then(() => loadNotices());
+    console.warn('LIFF init failed:', e);
+  } finally {
+    showLoading(false);
+    try { const d = document.getElementById('cmpDate'); if (d && !d.value) d.valueAsDate = new Date(); } catch (_) {}
+  }
+})();
+
+// === お知らせ機能 ===
+let currentNotices = [];
+let currentNoticeId = null;
+let isAdminUser = false;
+let employeeListCache = [];
+let groupListCache = [];
+
+async function loadNotices() {
+  const list = document.getElementById('noticeList');
+  // キャッシュがあれば即表示（体感速度UP）
+  try {
+    const cached = sessionStorage.getItem('notif_cache_' + userId);
+    if (cached) {
+      currentNotices = JSON.parse(cached);
+      renderNoticeList();
+    } else {
+      list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>';
+    }
+  } catch(_) {
+    list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>';
+  }
+  
+  // バックグラウンドで最新取得
+  const res = await apiPost({ action: 'notif_list', userId: userId });
+  if (!res.ok) {
+    if (!sessionStorage.getItem('notif_cache_' + userId)) {
+      list.innerHTML = '<div class="text-sm text-red-500 text-center py-8">読み込み失敗: ' + (res.error || '') + '</div>';
+    }
+    return;
+  }
+  currentNotices = res.notifications || [];
+  try { sessionStorage.setItem('notif_cache_' + userId, JSON.stringify(currentNotices)); } catch(_) {}
+  renderNoticeList();
+}
+
+function renderNoticeList() {
+  const list = document.getElementById('noticeList');
+  document.getElementById('noticeDetail').classList.add('hidden-section');
+  document.getElementById('noticeList').classList.remove('hidden-section');
+  if (currentNotices.length === 0) {
+    list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">お知らせはありません</div>';
+    updateNoticeBadge(0);
+    return;
+  }
+  const unconfirmedCount = currentNotices.filter(n => !n.confirmed && !n.expired).length;
+  updateNoticeBadge(unconfirmedCount);
+  const colorMap = { '緊急':'border-red-500 bg-red-50', 'お知らせ':'border-blue-500 bg-blue-50', '個別連絡':'border-green-500 bg-green-50', 'その他':'border-gray-400 bg-gray-50' };
+  list.innerHTML = currentNotices.map(n => {
+    const color = colorMap[n.category] || 'border-gray-400 bg-white';
+    const badge = n.expired
+      ? '<span class="text-xs text-gray-500">期限切れ</span>'
+      : (n.confirmed
+        ? '<span class="text-xs text-green-600 font-semibold">✓ 確認済</span>'
+        : '<span class="text-xs text-red-600 font-semibold">● 未確認</span>');
+    const dt = String(n.sentAt).split(' ')[0] + ' ' + (String(n.sentAt).split(' ')[1] || '').substring(0, 5);
+    return `<div class="border-l-4 ${color} rounded p-3 cursor-pointer notice-item" data-id="${n.id}">
+      <div class="flex justify-between items-center mb-1">
+        <span class="text-xs text-gray-600">【${n.category}】 ${dt}</span>
+        ${badge}
+      </div>
+      <div class="font-semibold text-sm">${escapeHtml(n.subject)}</div>
+      <div class="text-xs text-gray-500 mt-1">送信者: ${escapeHtml(n.sender)}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.notice-item').forEach(el => {
+    el.addEventListener('click', () => showNoticeDetail(el.dataset.id));
+  });
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function showNoticeDetail(id) {
+  const n = currentNotices.find(x => x.id === id);
+  if (!n) return;
+  currentNoticeId = id;
+  document.getElementById('noticeList').classList.add('hidden-section');
+  document.getElementById('noticeDetail').classList.remove('hidden-section');
+  const dt = String(n.sentAt);
+  document.getElementById('noticeDetailHeader').innerHTML = `
+    <div class="text-xs text-gray-600 mb-1">【${n.category}】 ${dt}</div>
+    <div class="font-bold text-base">${escapeHtml(n.subject)}</div>
+    <div class="text-xs text-gray-500 mt-1">送信者: ${escapeHtml(n.sender)}</div>
+  `;
+  document.getElementById('noticeDetailContent').textContent = n.content;
+  const btn = document.getElementById('btnNoticeConfirm');
+  if (n.confirmed) {
+    btn.textContent = '✓ 確認済み (' + n.myStatus.replace('✅ ', '') + ')';
+    btn.className = 'block w-full text-center py-3 bg-gray-300 text-gray-600 font-bold rounded';
+    btn.disabled = true;
+  } else {
+    btn.textContent = '確認しました';
+    btn.className = 'block w-full text-center py-3 bg-green-600 text-white font-bold rounded';
+    btn.disabled = false;
+  }
+}
+
+function updateNoticeBadge(count) {
+  const badge = document.getElementById('noticeBadge');
+  if (count > 0) {
+    badge.textContent = count > 9 ? '9+' : count;
+    badge.classList.remove('hidden-section');
+  } else {
+    badge.classList.add('hidden-section');
+  }
+}
+
+document.getElementById('btnNoticeBack').addEventListener('click', () => {
+  document.getElementById('noticeDetail').classList.add('hidden-section');
+  document.getElementById('noticeList').classList.remove('hidden-section');
+});
+
+document.getElementById('btnNoticeConfirm').addEventListener('click', async () => {
+  if (!currentNoticeId) return;
+  showLoading(true);
+  const res = await apiPost({ action: 'notif_confirm', userId: userId, notificationId: currentNoticeId });
+  showLoading(false);
+  if (res.ok) {
+    showAlert('success', '確認済みにしました');
+    await loadNotices();
+    showNoticeDetail(currentNoticeId);
+  } else {
+    showAlert('error', '失敗: ' + (res.error || ''));
+  }
+});
+
+// === 管理者機能 ===
+// 起動時に2本投げていたので1本にまとめる。
+// 失敗したときは印を戻し、保険のタイマーで取り直せるようにする。
+var _adminCheckDone = false;
+async function checkAdminStatus() {
+  if (_adminCheckDone) return;
+  _adminCheckDone = true;
+  try {
+    const res = await apiPost({ action: 'notif_is_admin', userId: userId });
+    isAdminUser = res.ok && res.isAdmin;
+    document.getElementById('adminTabBtn').classList.toggle('hidden-section', !isAdminUser);
+  } catch (e) {
+    _adminCheckDone = false;
+  }
+}
+
+async function loadEmployeeList() {
+  const res = await apiPost({ action: 'notif_employee_list', userId: userId });
+  if (res.ok) employeeListCache = res.employees || [];
+  return employeeListCache;
+}
+
+async function loadGroupList() {
+  const res = await apiPost({ action: 'notif_group_list', userId: userId });
+  if (res.ok) groupListCache = res.groups || [];
+  return groupListCache;
+}
+
+async function loadAdminTab() {
+  if (!isAdminUser) return;
+  await loadEmployeeList();
+  await loadGroupList();
+  // Populate group select
+  const gs = document.getElementById('admGroupSelect');
+  gs.innerHTML = groupListCache.map(g => `<option value="${escapeHtml(g.name)}">${escapeHtml(g.name)} (${g.members.length}名)</option>`).join('');
+  // Populate person checkboxes
+  const pl = document.getElementById('admPersonList');
+  pl.innerHTML = employeeListCache.map(e =>
+    `<label class="flex items-center gap-2"><input type="checkbox" value="${e.userId}" class="adm-person-cb"> <span>${escapeHtml(e.name)}</span></label>`
+  ).join('');
+  await loadAdminHistory();
+}
+
+document.getElementById('admRecipientType').addEventListener('change', (e) => {
+  document.getElementById('admGroupBlock').classList.toggle('hidden-section', e.target.value !== 'グループ');
+  document.getElementById('admPersonBlock').classList.toggle('hidden-section', e.target.value !== '個人');
+});
+
+function getAdminFormData(asDraft) {
+  const category = document.getElementById('admCategory').value;
+  const recipientType = document.getElementById('admRecipientType').value;
+  let recipient = '';
+  if (recipientType === 'グループ') {
+    recipient = document.getElementById('admGroupSelect').value;
+  } else if (recipientType === '個人') {
+    const ids = Array.from(document.querySelectorAll('.adm-person-cb:checked')).map(cb => cb.value);
+    recipient = ids.join(',');
+  }
+  const subject = document.getElementById('admSubject').value.trim();
+  const content = document.getElementById('admContent').value.trim();
+  const expiryDays = Number(document.getElementById('admExpiry').value);
+  return { category, recipientType, recipient, subject, content, expiryDays };
+}
+
+async function adminCreate(autoSend) {
+  const d = getAdminFormData();
+  if (!d.subject) { showAlert('error', '件名を入力してください'); return; }
+  if (!d.content) { showAlert('error', '本文を入力してください'); return; }
+  if (d.recipientType !== '全員' && !d.recipient) {
+    showAlert('error', '宛先を選択してください'); return;
+  }
+  showLoading(true);
+  const res = await apiPost({ action: 'notif_create', userId: userId, ...d });
+  if (!res.ok) {
+    showLoading(false);
+    showAlert('error', '作成失敗: ' + (res.error || '')); return;
+  }
+  if (autoSend) {
+    const sendRes = await apiPost({ action: 'notif_send', userId: userId, notificationId: res.notificationId });
+    showLoading(false);
+    if (sendRes.ok) {
+      showAlert('success', `送信完了！${sendRes.sentTo}名に送信、${sendRes.failed}件失敗`);
+      clearAdminForm();
+      await loadAdminHistory();
+    } else {
+      showAlert('error', '送信失敗: ' + (sendRes.error || ''));
+    }
+  } else {
+    showLoading(false);
+    showAlert('success', '下書き保存完了。送信履歴から送信できます');
+    clearAdminForm();
+    await loadAdminHistory();
+  }
+}
+
+function clearAdminForm() {
+  document.getElementById('admSubject').value = '';
+  document.getElementById('admContent').value = '';
+  document.querySelectorAll('.adm-person-cb').forEach(cb => cb.checked = false);
+}
+
+document.getElementById('btnAdmCreateAndSend').addEventListener('click', () => adminCreate(true));
+document.getElementById('btnAdmCreateDraft').addEventListener('click', () => adminCreate(false));
+
+async function loadAdminHistory() {
+  const list = document.getElementById('admHistoryList');
+  list.innerHTML = '<div class="text-gray-500 text-center py-2">読み込み中...</div>';
+  // Use the regular notification list as admin (will show all notifications you sent or received)
+  const res = await apiPost({ action: 'notif_list', userId: userId });
+  if (!res.ok) {
+    list.innerHTML = '<div class="text-red-500">読み込み失敗</div>';
+    return;
+  }
+  const items = (res.notifications || []).slice(0, 20);
+  if (items.length === 0) {
+    list.innerHTML = '<div class="text-gray-500 text-center py-2">送信履歴なし</div>';
+    return;
+  }
+  list.innerHTML = items.map(n => {
+    const dt = String(n.sentAt).substring(0, 16);
+    return `<div class="border rounded p-2">
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-gray-600">${dt} 【${n.category}】</span>
+        <button class="text-xs text-blue-600 btn-resend" data-id="${n.id}">未確認者に再送</button>
+      </div>
+      <div class="font-semibold text-sm mt-1">${escapeHtml(n.subject)}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.btn-resend').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('未確認者に再送しますか？')) return;
+    showLoading(true);
+    const r = await apiPost({ action: 'notif_resend', userId: userId, notificationId: b.dataset.id });
+    showLoading(false);
+    if (r.ok) showAlert('success', `${r.resentTo}名に再送しました`);
+    else showAlert('error', '失敗: ' + (r.error || ''));
+  }));
+}
+
+
+// === 出退勤・業務 進行中バナー ===
+// 出退勤タブの状態を取り直して描き直す（起動時・タブ表示時・打刻直後）
+async function refreshAttendanceBanner() {
+  if (!userId) return;
+  var box = document.getElementById('attStatusBox');
+  try {
+    const res = await apiPost({ action: 'attendance_status', userId: userId });
+    attRender(res);
+  } catch (e) {
+    if (box) {
+      box.className = 'tc-status tc-status-err';
+      box.textContent = '状態を取得できませんでした。通信環境を確認して開き直してください。';
+    }
+  }
+}
+
+async function refreshBusinessBanner() {
+  if (!userId) return;
+  const banner = document.getElementById('bizStatusBanner');
+  try {
+    const res = await apiPost({ action: 'business_status', userId: userId });
+    if (res.ok && res.status === 'in_progress') {
+      banner.className = 'mb-3 p-3 rounded shadow text-sm font-semibold bg-blue-100 text-blue-800 border-l-4 border-blue-500';
+      banner.innerHTML = '🔵 ' + res.businessType + ' 記録中です';
+      banner.classList.remove('hidden-section');
+    } else {
+      banner.classList.add('hidden-section');
+    }
+  } catch (e) {
+    banner.classList.add('hidden-section');
+  }
+}
+
+// switchTabにフックを追加
+const _origSwitchTab2 = switchTab;
+switchTab = function(name) {
+  _origSwitchTab2(name);
+  // 開いたタブに必要な分だけ取る（以前は全タブで2本ずつ投げていた）
+  if (name === 'attendance') refreshAttendanceBanner();
+  if (name === 'business')   refreshBusinessBanner();
+};
+
+// switchTabのフックを更新（既存のswitchTabを上書きせず追加）
+const _originalSwitchTab = switchTab;
+switchTab = function(name) {
+  _originalSwitchTab(name);
+  if (name === 'notice') loadNotices();
+  if (name === 'admin') loadAdminTab();
+  // バッジは下の60秒タイマーが更新する。タブを押すたびに notif_list を
+  // 投げると、押すたび1〜3秒の待ちが増えるだけなのでここでは呼ばない。
+};
+
+// バッジだけを軽量に更新する関数
+async function refreshNoticeBadgeOnly() {
+  try {
+    const res = await apiPost({ action: 'notif_list', userId: userId });
+    if (res.ok) {
+      const unconfirmedCount = (res.notifications || []).filter(n => !n.confirmed && !n.expired).length;
+      updateNoticeBadge(unconfirmedCount);
+    }
+  } catch (_) {}
+}
+
+// 60秒ごとにバッジを自動更新
+setInterval(() => { if (userId) refreshNoticeBadgeOnly(); }, 60000);
+
+
+// === マイページ機能 ===
+let _myProfile = null;
+
+async function loadMyProfile() {
+  if (!userId) return;
+  const loading = document.getElementById('myPageLoading');
+  const view = document.getElementById('myPageView');
+  const edit = document.getElementById('myPageEdit');
+  loading.classList.remove('hidden-section');
+  view.classList.add('hidden-section');
+  edit.classList.add('hidden-section');
+  try {
+    const res = await apiPost({ action: 'get_my_profile', userId: userId });
+    loading.classList.add('hidden-section');
+    if (!res.ok) {
+      view.classList.remove('hidden-section');
+      view.innerHTML = '<div class="text-sm text-red-600">' + (res.error || '取得失敗') + '</div>';
+      return;
+    }
+    _myProfile = res.profile;
+    renderMyProfileView();
+    view.classList.remove('hidden-section');
+  } catch (e) {
+    loading.classList.add('hidden-section');
+    view.classList.remove('hidden-section');
+    view.innerHTML = '<div class="text-sm text-red-600">通信エラー</div>';
+  }
+}
+
+function renderMyProfileView() {
+  const p = _myProfile || {};
+  document.getElementById('mpName').textContent = p.name || '-';
+  document.getElementById('mpVehicle').textContent = p.vehicleNumber || '-';
+  document.getElementById('mpLicense').textContent = p.licenseNumber || '-';
+  document.getElementById('mpLicenseExp').textContent = p.licenseExpiry || '-';
+  const liWrap = document.getElementById('mpLicenseImgWrap');
+  if (p.licenseImageUrl) {
+    liWrap.innerHTML = '<a href="' + p.licenseImageUrl + '" target="_blank"><img src="' + p.licenseImageUrl + '" class="rounded border max-h-48"></a>';
+  } else {
+    liWrap.innerHTML = '<span class="text-sm text-gray-400">未登録</span>';
+  }
+  const vpWrap = document.getElementById('mpVehiclePhotoWrap');
+  if (p.vehiclePhoto) {
+    vpWrap.innerHTML = '<a href="' + p.vehiclePhoto + '" target="_blank"><img src="' + p.vehiclePhoto + '" class="rounded border max-h-48"></a>';
+  } else {
+    vpWrap.innerHTML = '<span class="text-sm text-gray-400">未登録</span>';
+  }
+}
+
+function enterMyPageEdit() {
+  const p = _myProfile || {};
+  document.getElementById('mpEditVehicle').value = p.vehicleNumber || '';
+  document.getElementById('mpEditLicense').value = p.licenseNumber || '';
+  document.getElementById('mpEditLicenseExp').value = p.licenseExpiry || '';
+  document.getElementById('mpEditLicenseImg').value = '';
+  document.getElementById('mpEditVehiclePhoto').value = '';
+  document.getElementById('myPageView').classList.add('hidden-section');
+  document.getElementById('myPageEdit').classList.remove('hidden-section');
+}
+
+function cancelMyPageEdit() {
+  document.getElementById('myPageEdit').classList.add('hidden-section');
+  document.getElementById('myPageView').classList.remove('hidden-section');
+}
+
+async function saveMyPage() {
+  if (!userId) { showAlert('error', 'ユーザーIDがありません'); return; }
+  const btn = document.getElementById('btnMyPageSave');
+  btn.disabled = true; btn.textContent = '保存中...';
+  showLoading(true);
+  try {
+    const payload = { action: 'update_my_profile', userId: userId };
+    payload.vehicleNumber = document.getElementById('mpEditVehicle').value.trim();
+    payload.licenseNumber = document.getElementById('mpEditLicense').value.trim();
+    payload.licenseExpiry = document.getElementById('mpEditLicenseExp').value.trim();
+    const liUrl = await fileInputToDataURL('mpEditLicenseImg');
+    if (liUrl) payload.licenseImageDataUrl = liUrl;
+    const vpUrl = await fileInputToDataURL('mpEditVehiclePhoto');
+    if (vpUrl) payload.vehiclePhotoDataUrl = vpUrl;
+    const res = await apiPost(payload);
+    showLoading(false);
+    btn.disabled = false; btn.textContent = '保存する';
+    if (!res.ok) { showAlert('error', '保存失敗: ' + (res.error || '')); return; }
+    showAlert('success', '保存しました（' + (res.updated || []).join(', ') + '）');
+    cancelMyPageEdit();
+    loadMyProfile();
+  } catch (e) {
+    showLoading(false);
+    btn.disabled = false; btn.textContent = '保存する';
+    showAlert('error', 'エラー: ' + e.message);
+  }
+}
+
+document.getElementById('btnMyPageEdit').addEventListener('click', enterMyPageEdit);
+document.getElementById('btnMyPageCancel').addEventListener('click', cancelMyPageEdit);
+document.getElementById('btnMyPageSave').addEventListener('click', saveMyPage);
+
+const _origSwitchTab3 = switchTab;
+switchTab = function(name) {
+  _origSwitchTab3(name);
+  if (name === 'mypage') loadMyProfile();
+};
+
+
+// === 期間PDF生成 + LINE送付 ===
+function setPeriodToThisMonth() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const start = new Date(y, m, 1);
+  const end = new Date(y, m + 1, 0);
+  document.getElementById('periodStartDate').value = formatDateInput(start);
+  document.getElementById('periodEndDate').value = formatDateInput(end);
+}
+function setPeriodToLastMonth() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 0);
+  document.getElementById('periodStartDate').value = formatDateInput(start);
+  document.getElementById('periodEndDate').value = formatDateInput(end);
+}
+function formatDateInput(d) {
+  const y = d.getFullYear();
+  const m = ('0' + (d.getMonth() + 1)).slice(-2);
+  const dd = ('0' + d.getDate()).slice(-2);
+  return y + '-' + m + '-' + dd;
+}
+document.getElementById('btnPeriodThisMonth').addEventListener('click', setPeriodToThisMonth);
+document.getElementById('btnPeriodLastMonth').addEventListener('click', setPeriodToLastMonth);
+
+// 初期値: 今月
+setPeriodToThisMonth();
+
+document.getElementById('btnPeriodPdf').addEventListener('click', async () => {
+  const start = document.getElementById('periodStartDate').value;
+  const end = document.getElementById('periodEndDate').value;
+  const resultEl = document.getElementById('periodPdfResult');
+  if (!start || !end) { showAlert('error', '開始日と終了日を入力してください'); return; }
+  if (start > end) { showAlert('error', '開始日は終了日より前にしてください'); return; }
+  if (!confirm(start + ' 〜 ' + end + ' の期間でPDFを生成しLINEに送付します。よろしいですか？')) return;
+
+  const btn = document.getElementById('btnPeriodPdf');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '生成中...（最大30秒）';
+  resultEl.classList.add('hidden-section');
+  showLoading(true);
+  try {
+    const r = await apiPost({ action: 'generate_period_pdf', userId: userId, startDate: start, endDate: end });
+    showLoading(false);
+    btn.disabled = false; btn.textContent = orig;
+    if (!r.ok) {
+      showAlert('error', r.error || 'PDF生成失敗');
+      return;
+    }
+    const lineMsg = r.lineSent ? '✅ LINE送付済み' : '⚠️ LINE送付失敗（PDFは生成されています）';
+    resultEl.innerHTML =
+      '<div class="bg-green-50 border border-green-300 rounded p-2 space-y-1">' +
+        '<div class="font-semibold text-green-700">📄 PDF生成完了！（' + r.count + '件）</div>' +
+        '<div class="text-gray-600">' + lineMsg + '</div>' +
+        '<a href="' + r.url + '" target="_blank" class="block text-blue-600 underline">📄 PDFを開く</a>' +
+        '<a href="' + r.folderUrl + '" target="_blank" class="block text-blue-600 underline">📁 PDF保存フォルダを開く</a>' +
+      '</div>';
+    resultEl.classList.remove('hidden-section');
+    showAlert('success', 'PDF生成完了！LINEを確認してください');
+  } catch (e) {
+    showLoading(false);
+    btn.disabled = false; btn.textContent = orig;
+    showAlert('error', 'エラー: ' + e.message);
+  }
+});
+
+
+// === init notification on load ===
+// 起動時に userId が間に合わなかった場合の保険（済んでいれば何もしない）
+setTimeout(() => { if (userId) checkAdminStatus(); }, 2000);
+</script>
+</body>
+</html>
