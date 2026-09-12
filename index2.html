@@ -549,7 +549,16 @@
 </nav>
 
 <script>
-const LIFF_ID = '2009892557-Iki3540A';
+// LIFF ID は、エンドポイントURLの ?liffId=... があればそれを使う。
+// テスト用LIFFからも本番LIFFからも、同じこのファイル1本で動かすため。
+// 何も付いていなければ本番（社内勤怠・業務LIFF）とみなす。
+const LIFF_ID = (function () {
+  try {
+    var q = new URLSearchParams(location.search).get('liffId');
+    if (q && /^\d+-[A-Za-z0-9]+$/.test(q)) return q;
+  } catch (_) {}
+  return '2009892557-Iki3540A';
+})();
 const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwiEXWmwwhkdy8toQ_QnCHGeaxBdOZ6UqBHeyuf0WHza61E48OPGjJvYVWucoWxihBtAA/exec';
 const BUSINESS_TYPES = ['案件業務', '営業業務', '事務業務', '移動業務'];
 let userId = '', displayName = '';
