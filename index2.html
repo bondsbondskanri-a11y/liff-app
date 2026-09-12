@@ -793,6 +793,7 @@ function attRender(fromCache) {
     box.appendChild(d);
   }
   if (attSendState === 'sending') sub('⏳ ' + attSendLabel + 'を送信中…', 'tc-sending');
+  else if (attSendState === 'checking') sub('⏳ 記録できたか確認しています…', 'tc-sending');
   else if (attSendState === 'failed') sub('⚠ 記録できませんでした\nもう一度押してください', 'tc-failed');
   if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中', 'tc-sub');
   else if (bizUnknown) sub('業務の状態を確認しています…');
@@ -971,6 +972,34 @@ function attApplyLocal(act, endedBiz) {
   // 立ち寄り（biz_dropoff）は状態が変わらないので何もしない
 }
 
+/* ---------- 応答が失敗したときの答え合わせ ----------
+   GASは書き込みを済ませたのに応答だけ壊して返すことがある（実際に発生）。
+   「応答が失敗＝記録されていない」と決めつけると誤報になるので、
+   サーバーの実際の状態を取り直してから判断する。 */
+async function attVerifyState() {
+  const res = await apiPost({ action: 'attendance_status', userId: userId });
+  if (!res || typeof res !== 'object' || res.ok === false) throw new Error('確認できませんでした');
+  var b = { ok: true, status: null };
+  if ((res.status || '') === 'in') {
+    const r2 = await apiPost({ action: 'business_status', userId: userId });
+    if (!r2 || typeof r2 !== 'object' || r2.ok === false) throw new Error('確認できませんでした');
+    b = r2;
+  }
+  attLast = { att: res, biz: b };
+  attLastFetchAt = Date.now();
+}
+
+// 実際の状態が、やろうとした操作の結果になっているか
+// true=記録されている / false=されていない / null=判定できない（立ち寄り）
+function attMatches(act, endedBiz) {
+  var s = attWorkStatus(), bizOn = attBizOn();
+  if (act === 'in')        return s === 'in';
+  if (act === 'out')       return s === 'out' && (!endedBiz || !bizOn);
+  if (act === 'biz_start') return bizOn;
+  if (act === 'biz_end')   return !bizOn;
+  return null;   // 立ち寄りは状態が変わらないので確認できない
+}
+
 /* ---------- 送信 ---------- */
 async function attSubmit() {
   if (attSending || !attPending) return;               // 連打ガード
@@ -1018,31 +1047,56 @@ async function attSubmit() {
   // 送信は裏で行う。「送信中…」の表示が出ている間はまだ確定していない。
   // 失敗したら画面を送信前の状態に戻し、はっきり知らせる。
   var endedBiz = (act === 'out' && attEndBizWithOut);
-  attPrevSnap = JSON.parse(JSON.stringify(attLast));
   attSending = true;
-  attSendState = 'sending';
-  attSendLabel = String(def.label).replace(/\u3000/g, '');
-  attClosePanel();
-  attApplyLocal(act, endedBiz);
-  attRender();                         // ← 押してすぐ切り替わる
-
   try {
-    for (var i = 0; i < calls.length; i++) {
-      const res = await apiPost(calls[i]);
-      // 1本目で失敗したら2本目は送らない（中途半端に記録しない）
-      if (!res || !res.ok) throw new Error(attShort((res && res.error) || '送信に失敗しました'));
+    attPrevSnap = JSON.parse(JSON.stringify(attLast));
+    attSendState = 'sending';
+    attSendLabel = String(def.label).replace(/\u3000/g, '');
+    attClosePanel();
+    attApplyLocal(act, endedBiz);
+    attRender();                       // ← 押してすぐ切り替わる
+
+    try {
+      for (var i = 0; i < calls.length; i++) {
+        const res = await apiPost(calls[i]);
+        // 1本目で失敗したら2本目は送らない（中途半端に記録しない）
+        if (!res || !res.ok) throw new Error(attShort((res && res.error) || '送信に失敗しました'));
+      }
+      attSendState = null;
+      attRender();
+      showAlert('ok', okMsg);
+      attFetchPromise = refreshAttendanceBanner();   // 答え合わせは裏で
+
+    } catch (e) {
+      // ここに来ても「記録されていない」とは限らない。必ず実際の状態を見る。
+      var got = false;
+      try {
+        attSendState = 'checking';
+        attRender();
+        await attVerifyState();
+        got = true;
+      } catch (_) {}
+
+      if (got) {
+        var m = attMatches(act, endedBiz);
+        attSendState = (m === false) ? 'failed' : null;
+        attRender();
+        if (m === true) {
+          showAlert('ok', okMsg + '（応答が遅れましたが記録できています）');
+        } else if (m === null) {
+          showAlert('error', '記録できたか確認できませんでした。入っていなければもう一度押してください');
+        } else {
+          showAlert('error', '記録できませんでした。もう一度押してください');
+        }
+      } else {
+        attLast = attPrevSnap;         // 状態も確認できないので送信前に巻き戻す
+        attSendState = 'failed';
+        attRender();
+        showAlert('error', '記録できませんでした: ' + attShort(e && e.message ? e.message : e));
+      }
     }
-    attSendState = null;
-    attRender();
-    showAlert('ok', okMsg);
-    attFetchPromise = refreshAttendanceBanner();   // 答え合わせは裏で
-  } catch (e) {
-    attLast = attPrevSnap;             // 送信前に巻き戻す
-    attSendState = 'failed';
-    attRender();
-    showAlert('error', '記録できませんでした: ' + attShort(e && e.message ? e.message : e));
   } finally {
-    attSending = false;
+    attSending = false;                // 何が起きてもここは必ず通す
   }
 }
 
