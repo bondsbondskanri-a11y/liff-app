@@ -127,6 +127,12 @@
   .tc-today li { display:flex; justify-content:space-between; padding:7px 2px; border-top:1px solid #f3f4f6; font-size:15px; }
   .tc-today li:first-child { border-top:none; }
   .tc-today li .t { font-weight:700; font-variant-numeric:tabular-nums; }
+  .tc-btn-biz    { background:#2563eb; }
+  .tc-btn-drop   { background:#0891b2; }
+  .tc-btn-bizend { background:#b45309; }
+  .tc-note { background:#fef3c7; color:#92400e; border-radius:8px; padding:10px 12px;
+             font-size:13px; line-height:1.5; margin-bottom:12px; }
+  .tc-textarea { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:15px; line-height:1.5; }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -172,12 +178,19 @@
 
     <div id="attPanel" class="tc-panel hidden-section">
       <div id="attPanelTitle" class="tc-panel-title"></div>
+      <div id="attPanelNote" class="tc-note hidden-section"></div>
       <div class="tc-geo">
         <span id="attGeoText" class="tc-geo-wait">位置情報：取得中…</span>
         <button type="button" id="btnAttGeoRetry" class="tc-retry hidden-section">再試行</button>
       </div>
-      <label class="tc-label" for="attAlcohol">アルコール値（必須）</label>
-      <input type="number" step="0.01" min="0" inputmode="decimal" id="attAlcohol" class="tc-input" placeholder="0.00">
+      <div id="attContentBlock" class="hidden-section" style="margin-bottom:14px">
+        <label class="tc-label" for="attContent">業務内容（必須）</label>
+        <textarea id="attContent" rows="3" class="tc-textarea" placeholder="何をしたかを簡単に"></textarea>
+      </div>
+      <div id="attAlcoholBlock" class="hidden-section">
+        <label class="tc-label" for="attAlcohol">アルコール値（必須）</label>
+        <input type="number" step="0.01" min="0" inputmode="decimal" id="attAlcohol" class="tc-input" placeholder="0.00">
+      </div>
       <div class="tc-panel-actions">
         <button type="button" id="btnAttCancel" class="tc-cancel">やめる</button>
         <button type="button" id="btnAttSubmit" class="tc-submit" disabled>記録する</button>
@@ -527,7 +540,8 @@
   <button data-tab="attendance" class="tab-btn active">
     <span class="tab-btn-label">出退勤</span>
   </button>
-  <button data-tab="business" class="tab-btn">
+  <!-- 業務報告は出退勤画面に統合したのでタブは出さない -->
+  <button data-tab="business" class="tab-btn hidden-section">
     <span class="tab-btn-label">業務</span>
   </button>
   <button data-tab="vehicle" class="tab-btn">
@@ -627,27 +641,44 @@ function switchTab(name) {
 }
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
-/* ================= 出退勤（タイムカード式） =================
-   方針（timecard_liff.html と同じ）:
+/* ================= 出退勤 ＋ 業務報告（1画面に統合） =================
+   考え方（timecard_liff.html と同じ）:
    - 状態はサーバーが持つ。画面側で状態を推測しない
-   - 押せるボタンだけを描く
-   - 送信直後は必ずサーバーの最新状態を取り直して描き直す
-   位置情報は自動取得。ただし当社の運用では必須のため、
-   取れないときは送信させず「再試行」を出す。
+   - 「いま押せるボタン」だけを積んで出す
+   - 送信したら必ずサーバーの最新状態を取り直して描き直す
+
+   状態と、出すボタン:
+     未出勤            → 出勤
+     出勤中・業務なし  → 業務開始 / 退勤       ※事務所の日は業務開始を押さなくてよい
+     出勤中・業務中    → 立ち寄り / 業務終了 / 退勤
+     退勤済み          → なし
 ============================================================ */
-var ATT_DEF = {
-  'in':  { label: '出\u3000勤', cls: 'tc-btn-in',  panel: '出勤を記録します' },
-  'out': { label: '退\u3000勤', cls: 'tc-btn-out', panel: '退勤を記録します' }
-};
+
+// 業務区分は画面から廃止した。ただしサーバーは区分を受け取る前提なので、
+// 既存4区分のうちこれを固定で送る（集計・過去データと形が変わらない）。
+// 別の区分にしたい場合はこの1行を変えるだけ。
+var ATT_BIZ_TYPE = '案件業務';
 var ATT_GEO_TIMEOUT_MS = 12000;
-var attStatusNow = null;   // サーバーが返した最新状態
-var attConfirmed = false;  // サーバーの返事で描けたか（仮表示ではない）
-var attBootUid   = null;   // 前回の userId をキャッシュから先に使った場合
+
+var ATT_ACTIONS = {
+  'in':          { label: '出　勤',   cls: 'tc-btn-in',     panel: '出勤を記録します',       alcohol: true,  content: false },
+  'out':         { label: '退　勤',   cls: 'tc-btn-out',    panel: '退勤を記録します',       alcohol: true,  content: false },
+  'biz_start':   { label: '業務開始', cls: 'tc-btn-biz',    panel: '業務を開始します',       alcohol: false, content: false },
+  'biz_dropoff': { label: '立ち寄り', cls: 'tc-btn-drop',   panel: '立ち寄りを記録します',   alcohol: false, content: false },
+  'biz_end':     { label: '業務終了', cls: 'tc-btn-bizend', panel: '業務を終了します',       alcohol: false, content: true  }
+};
+
+var attLast      = { att: null, biz: null };  // サーバーが返した最新のもの
+var attStatusNow = null;
+var attConfirmed = false;   // サーバーの返事で描けたか（仮表示ではない）
+var attBootUid   = null;
 var attFetchPromise = null;
-var attPending   = null;   // 'in' | 'out'（パネルを開いている対象）
+
+var attPending   = null;    // 開いているパネルの操作名
 var attGeoVal    = null;
 var attGeoOk     = false;
 var attSending   = false;
+var attEndBizWithOut = false;   // 退勤と同時に業務も終了する
 
 /* ---------- 時計 ---------- */
 (function attStartClock() {
@@ -671,7 +702,6 @@ var attSending   = false;
 function attHm(v) {
   if (v == null || v === '') return '';
   var s = String(v).trim();
-
   var hasTz = /(Z|[+-]\d{2}:?\d{2}|GMT)/i.test(s);
   if (!hasTz) {
     var m = s.match(/(?:^|[T ])(\d{1,2}):(\d{2})/);
@@ -691,35 +721,45 @@ function attTodayKey() {
   return n.getFullYear() + '-' + ('0'+(n.getMonth()+1)).slice(-2) + '-' + ('0'+n.getDate()).slice(-2);
 }
 
-/* ---------- 描画：サーバーの状態だけを見る ---------- */
-// fromCache=true のときは前回の内容を仮表示しているだけ。
-// サーバーの返事が来るまで「確定」扱いにしない（記録ボタンも押させない）。
-function attRender(res, fromCache) {
-  var box  = document.getElementById('attStatusBox');
-  var wrap = document.getElementById('attButtons');
+function attWorkStatus() {
+  return (attLast.att && attLast.att.ok) ? (attLast.att.status || 'none') : 'none';
+}
+function attBizOn() {
+  return !!(attLast.biz && attLast.biz.ok && attLast.biz.status === 'in_progress');
+}
+
+/* ---------- 描画：サーバーの状態だけを見る ----------
+   fromCache=true は前回の内容の仮表示。サーバーの返事が来るまで確定にしない
+   （確定前は「記録する」を押せないので、古い状態のまま打刻されることはない）。*/
+function attRender(fromCache) {
+  var box   = document.getElementById('attStatusBox');
+  var wrap  = document.getElementById('attButtons');
   var today = document.getElementById('attTodayWrap');
   var list  = document.getElementById('attTodayList');
   if (!box || !wrap) return;
 
-  var status = (res && res.ok) ? (res.status || 'none') : 'none';
-  attStatusNow = status;
+  var s = attWorkStatus();
+  var bizOn = attBizOn();
+  var bizUnknown = (s === 'in' && attLast.biz === null);
+  attStatusNow = s;
 
   if (!fromCache) {
     attConfirmed = true;
     try {
-      localStorage.setItem('att_cache_' + userId, JSON.stringify({ d: attTodayKey(), res: res }));
+      localStorage.setItem('att_cache_' + userId, JSON.stringify({ d: attTodayKey(), v: 2, last: attLast }));
     } catch (_) {}
     attUpdateSubmit();
   }
 
+  // ---- 状態表示 ----
   var allowed = [];
   var label;
-  if (status === 'in') {
+  if (s === 'in') {
     box.className = 'tc-status tc-status-in';
-    var hm = attHm(res.clockInTime);
+    var hm = attHm(attLast.att.clockInTime);
     label = hm ? ('出勤中（' + hm + ' 〜）') : '出勤中';
-    allowed = ['out'];
-  } else if (status === 'out') {
+    allowed = bizUnknown ? ['out'] : (bizOn ? ['biz_dropoff', 'biz_end', 'out'] : ['biz_start', 'out']);
+  } else if (s === 'out') {
     box.className = 'tc-status tc-status-out';
     label = '本日退勤済み';
     allowed = [];
@@ -729,22 +769,26 @@ function attRender(res, fromCache) {
     allowed = ['in'];
   }
   box.textContent = label;
-  if (fromCache) {
-    var sub = document.createElement('div');
-    sub.style.fontSize = '11px';
-    sub.style.fontWeight = 'normal';
-    sub.style.marginTop = '3px';
-    sub.style.opacity = '0.75';
-    sub.textContent = '前回の内容を表示中・確認しています…';
-    box.appendChild(sub);
-  }
 
-  // 本日の記録
+  function sub(text) {
+    var d = document.createElement('div');
+    d.style.fontSize = '11px';
+    d.style.fontWeight = 'normal';
+    d.style.marginTop = '3px';
+    d.style.opacity = '0.8';
+    d.textContent = text;
+    box.appendChild(d);
+  }
+  if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中');
+  else if (bizUnknown) sub('業務の状態を確認しています…');
+  if (fromCache) sub('前回の内容を表示中・確認しています…');
+
+  // ---- 本日の記録 ----
   if (list && today) {
     list.innerHTML = '';
     var rows = [];
-    if (res && res.clockInTime)  rows.push(['出勤', attHm(res.clockInTime)]);
-    if (res && res.clockOutTime) rows.push(['退勤', attHm(res.clockOutTime)]);
+    if (attLast.att && attLast.att.clockInTime)  rows.push(['出勤', attHm(attLast.att.clockInTime)]);
+    if (attLast.att && attLast.att.clockOutTime) rows.push(['退勤', attHm(attLast.att.clockOutTime)]);
     rows.forEach(function (r) {
       var li = document.createElement('li');
       var s1 = document.createElement('span'); s1.textContent = r[0];
@@ -754,7 +798,7 @@ function attRender(res, fromCache) {
     today.classList.toggle('hidden-section', rows.length === 0);
   }
 
-  // 押せるボタンだけ描く
+  // ---- 押せるボタンだけ描く ----
   wrap.innerHTML = '';
   if (!allowed.length) {
     var p = document.createElement('div');
@@ -763,31 +807,56 @@ function attRender(res, fromCache) {
     wrap.appendChild(p);
     return;
   }
-  allowed.forEach(function (type) {
-    var def = ATT_DEF[type];
+  allowed.forEach(function (act) {
+    var def = ATT_ACTIONS[act];
     if (!def) return;
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'tc-punch ' + def.cls;
     btn.textContent = def.label;
-    btn.onclick = function () { attOpenPanel(type); };
+    btn.onclick = function () { attOpenPanel(act); };
     wrap.appendChild(btn);
   });
 }
 
 /* ---------- 入力パネル ---------- */
-function attOpenPanel(type) {
-  if (!ATT_DEF[type]) return;
-  attPending = type;
-  document.getElementById('attPanelTitle').textContent = ATT_DEF[type].panel;
+function attOpenPanel(act) {
+  var def = ATT_ACTIONS[act];
+  if (!def) return;
+
+  // 業務が進行中のまま退勤しようとしたら、業務も一緒に終了するか確認する
+  attEndBizWithOut = (act === 'out' && attBizOn());
+
+  attPending = act;
+  var title = attEndBizWithOut ? '業務を終了して退勤します' : def.panel;
+  document.getElementById('attPanelTitle').textContent = title;
+
+  var note = document.getElementById('attPanelNote');
+  if (attEndBizWithOut) {
+    note.textContent = '業務が進行中です。このまま進めると、業務終了と退勤をまとめて記録します。';
+    note.classList.remove('hidden-section');
+  } else {
+    note.classList.add('hidden-section');
+  }
+
+  var needAlcohol = def.alcohol;
+  var needContent = def.content || attEndBizWithOut;
+  document.getElementById('attAlcoholBlock').classList.toggle('hidden-section', !needAlcohol);
+  document.getElementById('attContentBlock').classList.toggle('hidden-section', !needContent);
   document.getElementById('attAlcohol').value = '';
+  document.getElementById('attContent').value = '';
+
   document.getElementById('attPanel').classList.remove('hidden-section');
   document.getElementById('attButtons').classList.add('hidden-section');
-  attFetchGeo();                       // 位置情報は裏で取る。その間に値を入力できる
-  try { document.getElementById('attAlcohol').focus(); } catch (_) {}
+  attFetchGeo();                       // 位置情報は裏で取る。その間に入力できる
+  try {
+    if (needAlcohol) document.getElementById('attAlcohol').focus();
+    else if (needContent) document.getElementById('attContent').focus();
+  } catch (_) {}
 }
+
 function attClosePanel() {
-  attPending = null; attGeoVal = null; attGeoOk = false;
+  attPending = null; attGeoVal = null; attGeoOk = false; attEndBizWithOut = false;
   document.getElementById('attPanel').classList.add('hidden-section');
   document.getElementById('attButtons').classList.remove('hidden-section');
 }
@@ -840,31 +909,76 @@ function attGeoFail(msg) {
 
 /* ---------- 送信可否 ---------- */
 function attUpdateSubmit() {
-  var el = document.getElementById('attAlcohol');
   var btn = document.getElementById('btnAttSubmit');
-  if (!el || !btn) return;
-  var v = el.value;
-  // attConfirmed: 仮表示のまま記録させない（前回の状態で打ってしまうのを防ぐ）
-  btn.disabled = !(attConfirmed && attGeoOk && v !== '' && !isNaN(Number(v)) && !attSending);
+  if (!btn || !attPending) return;
+  var def = ATT_ACTIONS[attPending];
+  if (!def) return;
+
+  var ok = attConfirmed && attGeoOk && !attSending;
+  if (def.alcohol) {
+    var v = document.getElementById('attAlcohol').value;
+    if (v === '' || isNaN(Number(v))) ok = false;
+  }
+  if (def.content || attEndBizWithOut) {
+    if (!document.getElementById('attContent').value.trim()) ok = false;
+  }
+  btn.disabled = !ok;
   btn.textContent = attConfirmed ? '記録する' : '状態を確認中…';
 }
 
 /* ---------- 送信 ---------- */
 async function attSubmit() {
   if (attSending || !attPending) return;               // 連打ガード
-  var v = document.getElementById('attAlcohol').value;
+  var act = attPending;
+  var def = ATT_ACTIONS[act];
   if (!attGeoOk || !attGeoVal) return showAlert('error', '位置情報が取得できていません');
-  if (v === '' || isNaN(Number(v))) return showAlert('error', 'アルコール値を入力してください');
 
-  var type = attPending;
+  var alcohol = null;
+  if (def.alcohol) {
+    var v = document.getElementById('attAlcohol').value;
+    if (v === '' || isNaN(Number(v))) return showAlert('error', 'アルコール値を入力してください');
+    alcohol = Number(v);
+  }
+  var content = '';
+  if (def.content || attEndBizWithOut) {
+    content = document.getElementById('attContent').value.trim();
+    if (!content) return showAlert('error', '業務内容を入力してください');
+  }
+
+  // 送る中身を組み立てる（退勤＋業務終了のときだけ2本になる）
+  var lat = attGeoVal.lat, lng = attGeoVal.lng;
+  var calls = [];
+  if (act === 'in' || act === 'out') {
+    if (act === 'out' && attEndBizWithOut) {
+      calls.push({ action: 'business_report', userId: userId, status: 'end', lat: lat, lng: lng, content: content });
+    }
+    calls.push({ action: 'attendance', userId: userId, type: act, lat: lat, lng: lng, alcohol: alcohol });
+  } else if (act === 'biz_start') {
+    calls.push({ action: 'business_report', userId: userId, status: 'start', businessType: ATT_BIZ_TYPE, lat: lat, lng: lng });
+  } else if (act === 'biz_dropoff') {
+    calls.push({ action: 'business_report', userId: userId, status: 'dropoff', lat: lat, lng: lng });
+  } else if (act === 'biz_end') {
+    calls.push({ action: 'business_report', userId: userId, status: 'end', lat: lat, lng: lng, content: content });
+  }
+
+  var messages = {
+    'in': '出勤を記録しました', 'out': '退勤を記録しました',
+    'biz_start': '業務を開始しました', 'biz_dropoff': '立ち寄りを記録しました',
+    'biz_end': '業務を終了しました'
+  };
+  var okMsg = (act === 'out' && attEndBizWithOut) ? '業務終了と退勤を記録しました' : messages[act];
+
   attSending = true; attUpdateSubmit(); showLoading(true);
   try {
-    const res = await apiPost({
-      action: 'attendance', userId: userId, type: type,
-      lat: attGeoVal.lat, lng: attGeoVal.lng, alcohol: Number(v)
-    });
-    if (!res || !res.ok) { showAlert('error', (res && res.error) || '送信に失敗しました'); return; }
-    showAlert('ok', (type === 'in' ? '出勤' : '退勤') + 'を記録しました');
+    for (var i = 0; i < calls.length; i++) {
+      const res = await apiPost(calls[i]);
+      if (!res || !res.ok) {
+        // 1本目で失敗したら2本目は送らない（中途半端に記録しない）
+        showAlert('error', (res && res.error) || '送信に失敗しました');
+        return;
+      }
+    }
+    showAlert('ok', okMsg);
     attClosePanel();
   } catch (e) {
     showAlert('error', '通信に失敗しました: ' + (e && e.message ? e.message : e));
@@ -880,12 +994,12 @@ document.getElementById('btnAttSubmit').addEventListener('click', attSubmit);
 document.getElementById('btnAttCancel').addEventListener('click', attClosePanel);
 document.getElementById('btnAttGeoRetry').addEventListener('click', attFetchGeo);
 document.getElementById('attAlcohol').addEventListener('input', attUpdateSubmit);
+document.getElementById('attContent').addEventListener('input', attUpdateSubmit);
 
 /* ---------- 起動を速くする ----------
    LIFFの初期化（liff.init → getProfile）は1秒前後かかる。その間ただ待つのを
    やめ、前回と同じ人だとみなして先に状態を取りに行く。あわせて前回の表示を
-   すぐ出す（仮表示。サーバーの返事が来たら必ず描き直す）。
-   仮表示の間は「記録する」を押せないので、古い状態のまま打刻されることはない。 */
+   すぐ出す（仮表示。サーバーの返事が来たら必ず描き直す）。 */
 (function attBootFromCache() {
   var uid = null;
   try { uid = localStorage.getItem('att_uid'); } catch (_) { return; }
@@ -907,7 +1021,10 @@ document.getElementById('attAlcohol').addEventListener('input', attUpdateSubmit)
     if (raw) {
       var c = JSON.parse(raw);
       // 日付が変わっていたら前日の状態は使わない
-      if (c && c.d === attTodayKey() && c.res) attRender(c.res, true);
+      if (c && c.d === attTodayKey() && c.v === 2 && c.last) {
+        attLast = c.last;
+        attRender(true);
+      }
     }
   } catch (_) {}
 
@@ -1587,8 +1704,20 @@ async function refreshAttendanceBanner(opts) {
         attShowError('状態を取得できませんでした。', 'サーバー応答: ' + res.error);
         return;
       }
-      attRender(res);
+      attLast = { att: res, biz: null };
+      attRender();                     // まず出退勤だけ描く（ここで画面が使える）
       attFailDetail = '';
+      // 出勤中のときだけ、続けて業務の状態も取りに行く。
+      // GASは同一ユーザーの実行を直列化するので、必要なときだけ投げる。
+      if ((res.status || '') === 'in') {
+        try {
+          const b = await apiPost({ action: 'business_status', userId: userId });
+          attLast.biz = (b && typeof b === 'object') ? b : { ok: false };
+        } catch (_) {
+          attLast.biz = { ok: false };   // 取れなくても出退勤は操作できるようにする
+        }
+        attRender();
+      }
       return;
     } catch (e) {
       lastErr = (e && e.message ? e.message : String(e)) + '（' + (Date.now() - t0) + 'ms・' + i + '回目）';
