@@ -100,6 +100,8 @@
   .tc-status-in   { background:#dcfce7; color:#15803d; }
   .tc-status-out  { background:#e5e7eb; color:#4b5563; }
   .tc-status-err  { background:#fee2e2; color:#b91c1c; font-size:14px; }
+  /* 何が入っても画面を埋めないための保険 */
+  .tc-status { max-height:40vh; overflow:hidden; overflow-wrap:anywhere; }
   .tc-buttons { display:flex; flex-direction:column; gap:14px; }
   .tc-punch { width:100%; min-height:88px; font-size:26px; font-weight:700; letter-spacing:4px;
               border:none; border-radius:14px; color:#fff; box-shadow:0 3px 8px rgba(0,0,0,0.15); cursor:pointer; }
@@ -1731,8 +1733,13 @@ async function refreshAttendanceBanner(opts) {
     try {
       const res = await apiPost({ action: 'attendance_status', userId: userId });
       if (res && typeof res === 'object' && res.ok === false && res.error) {
-        // サーバーは応答したが中身がエラー。再試行しても同じなので即座に出す。
-        attShowError('状態を取得できませんでした。', 'サーバー応答: ' + res.error);
+        // GASが混雑するとJSONではなくHTMLのエラーページを返すことがある。
+        // これは一時的なものなので、中身は画面に出さず再試行に回す。
+        if (String(res.error).indexOf('invalid response') === 0) {
+          throw new Error('サーバーが正しい応答を返しませんでした（一時的な混雑の可能性）');
+        }
+        // それ以外はサーバーが出した本当のエラー。短く出す。
+        attShowError('状態を取得できませんでした。', 'サーバー応答: ' + attShort(res.error));
         return;
       }
       // 業務の状態は「いま分かっている値」を保持したまま出退勤だけ差し替える。
@@ -1766,11 +1773,17 @@ async function refreshAttendanceBanner(opts) {
   attShowError('状態を取得できませんでした。', lastErr || '');
 }
 
+// 失敗理由は短く1行に。HTMLや長文がそのまま画面を埋めないようにする。
+function attShort(s) {
+  var t = String(s == null ? '' : s).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > 100 ? (t.slice(0, 100) + '…') : t;
+}
+
 // エラー表示＋その場でやり直せるボタン。原因も小さく出す（現地調査用）
 function attShowError(msg, detail) {
   var box  = document.getElementById('attStatusBox');
   var wrap = document.getElementById('attButtons');
-  attFailDetail = detail || '';
+  attFailDetail = attShort(detail);
   if (box) {
     box.className = 'tc-status tc-status-err';
     box.innerHTML = '';
