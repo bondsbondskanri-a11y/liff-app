@@ -117,6 +117,9 @@
   .tc-btn-in  { background:#16a34a; }
   .tc-btn-out { background:#dc2626; }
   .tc-done { text-align:center; color:#6b7280; font-size:14px; padding:22px 10px; background:#fff; border-radius:12px; }
+  /* 業務終了が無いときも同じ高さを空けて、退勤ボタンの位置を動かさない */
+  .tc-spacer { height:88px; }
+  .tc-divider { height:1px; background:#e5e7eb; margin:4px 2px; }
   .tc-panel { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.12); padding:16px; }
   .tc-panel-title { font-size:17px; font-weight:700; margin-bottom:12px; text-align:center; }
   .tc-geo { display:flex; align-items:center; justify-content:space-between; gap:8px;
@@ -800,12 +803,14 @@ function attRender(fromCache) {
     d.className = cls || 'tc-sub-mini';
     d.textContent = text;
     box.appendChild(d);
+    return d;
   }
   if (attSendState === 'sending') sub('⏳ ' + attSendLabel + 'を送信中…', 'tc-sending');
   else if (attSendState === 'checking') sub('⏳ 記録できたか確認しています…', 'tc-sending');
   else if (attSendState === 'failed') sub('⚠ 記録できませんでした\nもう一度押してください', 'tc-failed');
   if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中', 'tc-sub');
-  else if (bizUnknown) sub('業務の状態を確認しています…');
+  else if (bizUnknown) sub('業務の状態を確認しています…', 'tc-sub');
+  else if (s === 'in') sub('　', 'tc-sub').style.visibility = 'hidden';  // 高さを保ち、退勤ボタンを動かさない
   if (fromCache) sub('前回の内容を表示中・確認しています…');
 
   // ---- 本日の記録 ----
@@ -823,25 +828,46 @@ function attRender(fromCache) {
     today.classList.toggle('hidden-section', rows.length === 0);
   }
 
-  // ---- 押せるボタンだけ描く ----
+  // ---- ボタンを描く ----
+  // 出勤中は「上＝業務の操作／下＝退勤」で位置を固定する。
+  // 業務中が解除された瞬間にボタンが繰り上がると、指を置いた場所が
+  // 「業務終了」から「退勤」に入れ替わってしまうため（誤打刻の原因）。
+  function mkBtn(act) {
+    var d = ATT_ACTIONS[act];
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tc-punch ' + d.cls;
+    btn.textContent = d.label;
+    btn.onclick = function () { attOpenPanel(act); };
+    return btn;
+  }
+  function mkSpacer() {
+    var d = document.createElement('div');
+    d.className = 'tc-spacer';
+    return d;
+  }
+
   wrap.innerHTML = '';
-  if (!allowed.length) {
+  if (s === 'out') {
     var p = document.createElement('div');
     p.className = 'tc-done';
     p.textContent = '本日の打刻は完了しています。おつかれさまでした。';
     wrap.appendChild(p);
     return;
   }
-  allowed.forEach(function (act) {
-    var def = ATT_ACTIONS[act];
-    if (!def) return;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'tc-punch ' + def.cls;
-    btn.textContent = def.label;
-    btn.onclick = function () { attOpenPanel(act); };
-    wrap.appendChild(btn);
-  });
+  if (s !== 'in') {                       // 未出勤：出勤だけ
+    wrap.appendChild(mkBtn('in'));
+    return;
+  }
+
+  // 出勤中：位置を固定した3段
+  wrap.appendChild(mkBtn(bizOn ? 'biz_dropoff' : 'biz_start'));   // 1段目
+  if (bizOn) wrap.appendChild(mkBtn('biz_end'));                  // 2段目
+  else       wrap.appendChild(mkSpacer());                        //   （空けておく）
+  var hr = document.createElement('div');
+  hr.className = 'tc-divider';
+  wrap.appendChild(hr);
+  wrap.appendChild(mkBtn('out'));                                 // 3段目＝常に退勤
 }
 
 /* ---------- 入力パネル ---------- */
