@@ -682,6 +682,9 @@ var attGeoVal    = null;
 var attGeoOk     = false;
 var attSending   = false;
 var attEndBizWithOut = false;   // 退勤と同時に業務も終了する
+var attSendState  = null;   // null | 'sending' | 'failed'
+var attSendLabel  = '';
+var attPrevSnap   = null;   // 送信前の状態（失敗したら戻す）
 
 /* ---------- 時計 ---------- */
 (function attStartClock() {
@@ -748,9 +751,11 @@ function attRender(fromCache) {
 
   if (!fromCache) {
     attConfirmed = true;
-    try {
-      localStorage.setItem('att_cache_' + userId, JSON.stringify({ d: attTodayKey(), v: 2, last: attLast }));
-    } catch (_) {}
+    if (attSendState !== 'sending') {   // 送信中の仮の状態は保存しない
+      try {
+        localStorage.setItem('att_cache_' + userId, JSON.stringify({ d: attTodayKey(), v: 2, last: attLast }));
+      } catch (_) {}
+    }
     attUpdateSubmit();
   }
 
@@ -782,6 +787,8 @@ function attRender(fromCache) {
     d.textContent = text;
     box.appendChild(d);
   }
+  if (attSendState === 'sending') sub('⏳ ' + attSendLabel + 'を送信中…');
+  else if (attSendState === 'failed') sub('⚠ 記録できませんでした。もう一度押してください');
   if (bizOn) sub('▶ ' + ((attLast.biz.businessType || '業務')) + ' 記録中');
   else if (bizUnknown) sub('業務の状態を確認しています…');
   if (fromCache) sub('前回の内容を表示中・確認しています…');
@@ -826,6 +833,8 @@ function attRender(fromCache) {
 function attOpenPanel(act) {
   var def = ATT_ACTIONS[act];
   if (!def) return;
+  if (attSending) { showAlert('error', '前の記録を送信中です。少し待ってください'); return; }
+  attSendState = null;   // やり直すので警告は消す
 
   // 業務が進行中のまま退勤しようとしたら、業務も一緒に終了するか確認する
   attEndBizWithOut = (act === 'out' && attBizOn());
@@ -999,28 +1008,37 @@ async function attSubmit() {
   };
   var okMsg = (act === 'out' && attEndBizWithOut) ? '業務終了と退勤を記録しました' : messages[act];
 
-  attSending = true; attUpdateSubmit(); showLoading(true);
+  // ---- ここから先は待たせない ----
+  // 画面全体を覆うマスクは出さない。押した瞬間に結果の画面へ進め、
+  // 送信は裏で行う。「送信中…」の表示が出ている間はまだ確定していない。
+  // 失敗したら画面を送信前の状態に戻し、はっきり知らせる。
+  var endedBiz = (act === 'out' && attEndBizWithOut);
+  attPrevSnap = JSON.parse(JSON.stringify(attLast));
+  attSending = true;
+  attSendState = 'sending';
+  attSendLabel = String(def.label).replace(/\u3000/g, '');
+  attClosePanel();
+  attApplyLocal(act, endedBiz);
+  attRender();                         // ← 押してすぐ切り替わる
+
   try {
     for (var i = 0; i < calls.length; i++) {
       const res = await apiPost(calls[i]);
-      if (!res || !res.ok) {
-        // 1本目で失敗したら2本目は送らない（中途半端に記録しない）
-        showAlert('error', (res && res.error) || '送信に失敗しました');
-        return;
-      }
+      // 1本目で失敗したら2本目は送らない（中途半端に記録しない）
+      if (!res || !res.ok) throw new Error(attShort((res && res.error) || '送信に失敗しました'));
     }
+    attSendState = null;
+    attRender();
     showAlert('ok', okMsg);
-    attClosePanel();
-    attApplyLocal(act, (act === 'out' && attEndBizWithOut));
-    attRender();                       // ← ここで即座に画面が切り替わる
+    attFetchPromise = refreshAttendanceBanner();   // 答え合わせは裏で
   } catch (e) {
-    showAlert('error', '通信に失敗しました: ' + (e && e.message ? e.message : e));
-    return;
+    attLast = attPrevSnap;             // 送信前に巻き戻す
+    attSendState = 'failed';
+    attRender();
+    showAlert('error', '記録できませんでした: ' + attShort(e && e.message ? e.message : e));
   } finally {
-    attSending = false; showLoading(false); attUpdateSubmit();
+    attSending = false;
   }
-  // 答え合わせは裏で。待たない（ズレていればここで描き直される）
-  attFetchPromise = refreshAttendanceBanner();
 }
 
 document.getElementById('btnAttSubmit').addEventListener('click', attSubmit);
