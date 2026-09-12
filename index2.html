@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>社内LIFFアプリ</title>
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://script.google.com">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -638,6 +641,9 @@ var ATT_DEF = {
 };
 var ATT_GEO_TIMEOUT_MS = 12000;
 var attStatusNow = null;   // サーバーが返した最新状態
+var attConfirmed = false;  // サーバーの返事で描けたか（仮表示ではない）
+var attBootUid   = null;   // 前回の userId をキャッシュから先に使った場合
+var attFetchPromise = null;
 var attPending   = null;   // 'in' | 'out'（パネルを開いている対象）
 var attGeoVal    = null;
 var attGeoOk     = false;
@@ -658,13 +664,37 @@ var attSending   = false;
   setInterval(tick, 1000);
 })();
 
+// サーバーが返す日時は形式がまちまち（"2026-09-12 08:31:00" / ISO形式 /
+// Dateをそのまま文字列化したもの）。どれでも「HH:MM」を取り出す。
+// タイムゾーン表記が付いていない文字列は、GASが日本時間で書いた値とみなして
+// そのまま使う（Dateに通すと環境によってUTC扱いされ9時間ずれるため）。
 function attHm(v) {
-  var t = String(v == null ? '' : v).split(' ')[1] || '';
-  return t.substring(0, 5);
+  if (v == null || v === '') return '';
+  var s = String(v).trim();
+
+  var hasTz = /(Z|[+-]\d{2}:?\d{2}|GMT)/i.test(s);
+  if (!hasTz) {
+    var m = s.match(/(?:^|[T ])(\d{1,2}):(\d{2})/);
+    if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  }
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  var m2 = s.match(/(\d{1,2}):(\d{2})/);
+  if (m2) return ('0' + m2[1]).slice(-2) + ':' + m2[2];
+  return '';
+}
+
+function attTodayKey() {
+  var n = new Date();
+  return n.getFullYear() + '-' + ('0'+(n.getMonth()+1)).slice(-2) + '-' + ('0'+n.getDate()).slice(-2);
 }
 
 /* ---------- 描画：サーバーの状態だけを見る ---------- */
-function attRender(res) {
+// fromCache=true のときは前回の内容を仮表示しているだけ。
+// サーバーの返事が来るまで「確定」扱いにしない（記録ボタンも押させない）。
+function attRender(res, fromCache) {
   var box  = document.getElementById('attStatusBox');
   var wrap = document.getElementById('attButtons');
   var today = document.getElementById('attTodayWrap');
@@ -674,19 +704,39 @@ function attRender(res) {
   var status = (res && res.ok) ? (res.status || 'none') : 'none';
   attStatusNow = status;
 
+  if (!fromCache) {
+    attConfirmed = true;
+    try {
+      localStorage.setItem('att_cache_' + userId, JSON.stringify({ d: attTodayKey(), res: res }));
+    } catch (_) {}
+    attUpdateSubmit();
+  }
+
   var allowed = [];
+  var label;
   if (status === 'in') {
     box.className = 'tc-status tc-status-in';
-    box.textContent = '出勤中（' + attHm(res.clockInTime) + ' 〜）';
+    var hm = attHm(res.clockInTime);
+    label = hm ? ('出勤中（' + hm + ' 〜）') : '出勤中';
     allowed = ['out'];
   } else if (status === 'out') {
     box.className = 'tc-status tc-status-out';
-    box.textContent = '本日退勤済み';
+    label = '本日退勤済み';
     allowed = [];
   } else {
     box.className = 'tc-status tc-status-none';
-    box.textContent = '未出勤';
+    label = '未出勤';
     allowed = ['in'];
+  }
+  box.textContent = label;
+  if (fromCache) {
+    var sub = document.createElement('div');
+    sub.style.fontSize = '11px';
+    sub.style.fontWeight = 'normal';
+    sub.style.marginTop = '3px';
+    sub.style.opacity = '0.75';
+    sub.textContent = '前回の内容を表示中・確認しています…';
+    box.appendChild(sub);
   }
 
   // 本日の記録
@@ -794,7 +844,9 @@ function attUpdateSubmit() {
   var btn = document.getElementById('btnAttSubmit');
   if (!el || !btn) return;
   var v = el.value;
-  btn.disabled = !(attGeoOk && v !== '' && !isNaN(Number(v)) && !attSending);
+  // attConfirmed: 仮表示のまま記録させない（前回の状態で打ってしまうのを防ぐ）
+  btn.disabled = !(attConfirmed && attGeoOk && v !== '' && !isNaN(Number(v)) && !attSending);
+  btn.textContent = attConfirmed ? '記録する' : '状態を確認中…';
 }
 
 /* ---------- 送信 ---------- */
@@ -828,6 +880,40 @@ document.getElementById('btnAttSubmit').addEventListener('click', attSubmit);
 document.getElementById('btnAttCancel').addEventListener('click', attClosePanel);
 document.getElementById('btnAttGeoRetry').addEventListener('click', attFetchGeo);
 document.getElementById('attAlcohol').addEventListener('input', attUpdateSubmit);
+
+/* ---------- 起動を速くする ----------
+   LIFFの初期化（liff.init → getProfile）は1秒前後かかる。その間ただ待つのを
+   やめ、前回と同じ人だとみなして先に状態を取りに行く。あわせて前回の表示を
+   すぐ出す（仮表示。サーバーの返事が来たら必ず描き直す）。
+   仮表示の間は「記録する」を押せないので、古い状態のまま打刻されることはない。 */
+(function attBootFromCache() {
+  var uid = null;
+  try { uid = localStorage.getItem('att_uid'); } catch (_) { return; }
+  if (!uid) return;
+
+  attBootUid = uid;
+  userId = uid;
+  try {
+    var dn = localStorage.getItem('att_dn');
+    if (dn) {
+      displayName = dn;
+      var el = document.getElementById('userName');
+      if (el) el.textContent = dn + ' さん';
+    }
+  } catch (_) {}
+
+  try {
+    var raw = localStorage.getItem('att_cache_' + uid);
+    if (raw) {
+      var c = JSON.parse(raw);
+      // 日付が変わっていたら前日の状態は使わない
+      if (c && c.d === attTodayKey() && c.res) attRender(c.res, true);
+    }
+  } catch (_) {}
+
+  showLoading(false);
+  attFetchPromise = refreshAttendanceBanner();
+})();
 
 // 保険：何らかの理由で状態が描かれないまま20秒たったら、
 // 「読み込み中」のまま放置せず、その場でやり直せるようにする。
@@ -1169,23 +1255,38 @@ setTimeout(() => showLoading(false), 5000);
       userId = 'DEBUG_USER';
       displayName = 'デバッグユーザー（ブラウザ）';
       document.getElementById('userName').textContent = displayName;
-      await refreshAttendanceBanner();   // ここを呼ばないと「読み込み中」で固まる
+      if (!attFetchPromise) await refreshAttendanceBanner();  // 未取得なら取る
       return;
     }
     const profile = await liff.getProfile();
     userId = profile.userId;
     displayName = profile.displayName;
     document.getElementById('userName').textContent = displayName + ' さん';
-    // GAS は同一ユーザーの同時実行を直列化するため、起動時に何本も投げると
-    // 「本数 x 1〜3秒」そのまま待たされる。まず出退勤の状態だけを取る。
-    await refreshAttendanceBanner();
+    try {
+      localStorage.setItem('att_uid', userId);
+      localStorage.setItem('att_dn', displayName);
+    } catch (_) {}
+
+    // 起動時に先行して投げてある場合は、それを待つだけ（二重に投げない）。
+    // 別の人がログインしていたらキャッシュは使えないので取り直す。
+    if (attBootUid === userId && attFetchPromise) {
+      await attFetchPromise;
+      if (!attConfirmed) await refreshAttendanceBanner();
+    } else {
+      if (attBootUid && attBootUid !== userId) {
+        attConfirmed = false;
+        try { localStorage.removeItem('att_cache_' + attBootUid); } catch (_) {}
+      }
+      await refreshAttendanceBanner();
+    }
     // 画面が使える状態になってから、残りを後追いで取る
     checkAdminStatus().then(() => loadNotices());
   } catch (e) {
     userId = 'DEBUG_USER';
     displayName = 'デバッグユーザー';
     document.getElementById('userName').textContent = 'LIFF外（デバッグモード）';
-    await refreshAttendanceBanner();     // ここを呼ばないと「読み込み中」で固まる
+    if (attFetchPromise) { await attFetchPromise; }
+    if (!attConfirmed) await refreshAttendanceBanner();
     checkAdminStatus().then(() => loadNotices());
     console.warn('LIFF init failed:', e);
   } finally {
