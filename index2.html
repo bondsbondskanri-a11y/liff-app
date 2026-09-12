@@ -1080,9 +1080,11 @@ async function attSubmit() {
         if (!res || !res.ok) throw new Error(attShort((res && res.error) || '送信に失敗しました'));
       }
       attSendState = null;
+      attLastFetchAt = Date.now();   // 送信結果＝最新なので取り直さない
       attRender();
       showAlert('ok', okMsg);
-      attFetchPromise = refreshAttendanceBanner();   // 答え合わせは裏で
+      // サーバーが ok を返した時点で結果は確定しているので、
+      // ここでさらに聞き直さない（1操作あたりの通信を半分に減らす）
 
     } catch (e) {
       // ここに来ても「記録されていない」とは限らない。必ず実際の状態を見る。
@@ -1818,8 +1820,10 @@ async function refreshAttendanceBanner(opts) {
     attShowError('ユーザー情報を取得できませんでした。LINEアプリから開き直してください。', '');
     return;
   }
-  var tries = (opts && opts.tries) || 3;      // 最大3回（1回目＋自動で2回）
-  var waitMs = 1200;
+  // 詰まっているサーバーに何度も投げると余計に詰まらせるので、
+  // 再試行は1回だけ・間隔は長めにする。
+  var tries = (opts && opts.tries) || 2;
+  var waitMs = 2500;
   var lastErr = null;
 
   for (var i = 1; i <= tries; i++) {
@@ -1858,7 +1862,7 @@ async function refreshAttendanceBanner(opts) {
       lastErr = (e && e.message ? e.message : String(e)) + '（' + (Date.now() - t0) + 'ms・' + i + '回目）';
       if (box && i < tries) {
         box.className = 'tc-status tc-status-none';
-        box.textContent = '接続し直しています…（' + i + '/' + (tries - 1) + '）';
+        box.textContent = '接続し直しています…';
       }
       if (i < tries) await new Promise(function (r) { setTimeout(r, waitMs); });
       waitMs = waitMs * 2;
@@ -1937,7 +1941,7 @@ switchTab = function(name) {
   _origSwitchTab2(name);
   // 開いたタブに必要な分だけ取る（以前は全タブで2本ずつ投げていた）
   // 30秒以内に取得済みなら聞き直さない（タブ切替のたびに数秒待たされるのを防ぐ）
-  if (name === 'attendance' && (Date.now() - attLastFetchAt) > 30000) refreshAttendanceBanner();
+  if (name === 'attendance' && (Date.now() - attLastFetchAt) > 60000) refreshAttendanceBanner();
   if (name === 'business')   refreshBusinessBanner();
 };
 
@@ -1962,8 +1966,11 @@ async function refreshNoticeBadgeOnly() {
   } catch (_) {}
 }
 
-// 60秒ごとにバッジを自動更新
-setInterval(() => { if (userId) refreshNoticeBadgeOnly(); }, 60000);
+// 60秒ごとの自動更新は廃止。
+// 利用者80人 x 毎分1回 = 1分あたり80回がGASに常時かかり、
+// これが詰まりの主因になりうる。バッジは起動時とお知らせタブを開いた
+// ときに更新されるので、常時ポーリングは不要。
+// setInterval(() => { if (userId) refreshNoticeBadgeOnly(); }, 60000);
 
 
 // === マイページ機能 ===
