@@ -673,6 +673,7 @@ var attStatusNow = null;
 var attConfirmed = false;   // サーバーの返事で描けたか（仮表示ではない）
 var attBootUid   = null;
 var attFetchPromise = null;
+var attLastFetchAt  = 0;    // 最後にサーバーから取れた時刻
 
 var attPending   = null;    // 開いているパネルの操作名
 var attGeoVal    = null;
@@ -926,6 +927,34 @@ function attUpdateSubmit() {
   btn.textContent = attConfirmed ? '記録する' : '状態を確認中…';
 }
 
+/* ---------- 記録が通った直後の画面反映 ----------
+   サーバーが ok を返した時点で結果は確定している。ここで聞き直すと
+   さらに2〜4秒待たせることになるので、確定した内容で先に描き替え、
+   答え合わせは裏で走らせる（ズレていれば裏の結果で描き直される）。 */
+function attNowStamp() {
+  var n = new Date();
+  function p2(x){ return ('0'+x).slice(-2); }
+  return n.getFullYear() + '-' + p2(n.getMonth()+1) + '-' + p2(n.getDate()) + ' ' +
+         p2(n.getHours()) + ':' + p2(n.getMinutes()) + ':' + p2(n.getSeconds());
+}
+function attApplyLocal(act, endedBiz) {
+  var now = attNowStamp();
+  var prev = attLast.att || {};
+  if (act === 'in') {
+    attLast.att = { ok: true, status: 'in', clockInTime: now };
+    attLast.biz = { ok: true, status: null };
+  } else if (act === 'out') {
+    attLast.att = { ok: true, status: 'out', clockInTime: prev.clockInTime || '', clockOutTime: now };
+    attLast.biz = { ok: true, status: null };
+  } else if (act === 'biz_start') {
+    attLast.biz = { ok: true, status: 'in_progress', businessType: ATT_BIZ_TYPE };
+  } else if (act === 'biz_end') {
+    attLast.biz = { ok: true, status: null };
+  }
+  if (endedBiz) attLast.biz = { ok: true, status: null };
+  // 立ち寄り（biz_dropoff）は状態が変わらないので何もしない
+}
+
 /* ---------- 送信 ---------- */
 async function attSubmit() {
   if (attSending || !attPending) return;               // 連打ガード
@@ -980,14 +1009,16 @@ async function attSubmit() {
     }
     showAlert('ok', okMsg);
     attClosePanel();
+    attApplyLocal(act, (act === 'out' && attEndBizWithOut));
+    attRender();                       // ← ここで即座に画面が切り替わる
   } catch (e) {
     showAlert('error', '通信に失敗しました: ' + (e && e.message ? e.message : e));
     return;
   } finally {
     attSending = false; showLoading(false); attUpdateSubmit();
   }
-  // 画面側で推測せず、サーバーの最新状態で描き直す
-  await refreshAttendanceBanner();
+  // 答え合わせは裏で。待たない（ズレていればここで描き直される）
+  attFetchPromise = refreshAttendanceBanner();
 }
 
 document.getElementById('btnAttSubmit').addEventListener('click', attSubmit);
@@ -1704,7 +1735,10 @@ async function refreshAttendanceBanner(opts) {
         attShowError('状態を取得できませんでした。', 'サーバー応答: ' + res.error);
         return;
       }
-      attLast = { att: res, biz: null };
+      // 業務の状態は「いま分かっている値」を保持したまま出退勤だけ差し替える。
+      // ここで null に戻すと、確認中の2秒間だけ業務ボタンが消えてしまう。
+      attLast = { att: res, biz: attLast.biz };
+      attLastFetchAt = Date.now();
       attRender();                     // まず出退勤だけ描く（ここで画面が使える）
       attFailDetail = '';
       // 出勤中のときだけ、続けて業務の状態も取りに行く。
@@ -1795,7 +1829,8 @@ const _origSwitchTab2 = switchTab;
 switchTab = function(name) {
   _origSwitchTab2(name);
   // 開いたタブに必要な分だけ取る（以前は全タブで2本ずつ投げていた）
-  if (name === 'attendance') refreshAttendanceBanner();
+  // 30秒以内に取得済みなら聞き直さない（タブ切替のたびに数秒待たされるのを防ぐ）
+  if (name === 'attendance' && (Date.now() - attLastFetchAt) > 30000) refreshAttendanceBanner();
   if (name === 'business')   refreshBusinessBanner();
 };
 
