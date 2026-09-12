@@ -143,6 +143,8 @@
   .tc-note { background:#fef3c7; color:#92400e; border-radius:8px; padding:10px 12px;
              font-size:13px; line-height:1.5; margin-bottom:12px; }
   .tc-textarea { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:15px; line-height:1.5; }
+  .tc-select { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:12px;
+               font-size:17px; background:#fff; appearance:auto; }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -194,7 +196,14 @@
         <button type="button" id="btnAttGeoRetry" class="tc-retry hidden-section">再試行</button>
       </div>
       <div id="attContentBlock" class="hidden-section" style="margin-bottom:14px">
-        <label class="tc-label" for="attContent">業務内容（必須）</label>
+        <label class="tc-label" for="attBizType">業務区分</label>
+        <select id="attBizType" class="tc-select">
+          <option value="案件業務">案件業務</option>
+          <option value="営業業務">営業業務</option>
+          <option value="事務業務">事務業務</option>
+          <option value="移動業務">移動業務</option>
+        </select>
+        <label class="tc-label" for="attContent" style="margin-top:14px">業務内容（必須）</label>
         <textarea id="attContent" rows="3" class="tc-textarea" placeholder="何をしたかを簡単に"></textarea>
       </div>
       <div id="attAlcoholBlock" class="hidden-section">
@@ -863,6 +872,13 @@ function attOpenPanel(act) {
   document.getElementById('attContentBlock').classList.toggle('hidden-section', !needContent);
   document.getElementById('attAlcohol').value = '';
   document.getElementById('attContent').value = '';
+  if (needContent) {
+    // 進行中の業務にサーバーが持っている区分を初期選択にする
+    var cur = (attLast.biz && attLast.biz.businessType) || ATT_BIZ_TYPE;
+    var sel = document.getElementById('attBizType');
+    sel.value = cur;
+    if (sel.value !== cur) sel.value = ATT_BIZ_TYPE;   // 想定外の値だったとき
+  }
 
   document.getElementById('attPanel').classList.remove('hidden-section');
   document.getElementById('attButtons').classList.add('hidden-section');
@@ -1013,10 +1029,11 @@ async function attSubmit() {
     if (v === '' || isNaN(Number(v))) return showAlert('error', 'アルコール値を入力してください');
     alcohol = Number(v);
   }
-  var content = '';
+  var content = '', chosenType = '';
   if (def.content || attEndBizWithOut) {
     content = document.getElementById('attContent').value.trim();
     if (!content) return showAlert('error', '業務内容を入力してください');
+    chosenType = document.getElementById('attBizType').value || ATT_BIZ_TYPE;
   }
 
   // 送る中身を組み立てる（退勤＋業務終了のときだけ2本になる）
@@ -1024,7 +1041,7 @@ async function attSubmit() {
   var calls = [];
   if (act === 'in' || act === 'out') {
     if (act === 'out' && attEndBizWithOut) {
-      calls.push({ action: 'business_report', userId: userId, status: 'end', lat: lat, lng: lng, content: content });
+      calls.push({ action: 'business_report', userId: userId, status: 'end', businessType: chosenType, lat: lat, lng: lng, content: content });
     }
     calls.push({ action: 'attendance', userId: userId, type: act, lat: lat, lng: lng, alcohol: alcohol });
   } else if (act === 'biz_start') {
@@ -1032,7 +1049,7 @@ async function attSubmit() {
   } else if (act === 'biz_dropoff') {
     calls.push({ action: 'business_report', userId: userId, status: 'dropoff', lat: lat, lng: lng });
   } else if (act === 'biz_end') {
-    calls.push({ action: 'business_report', userId: userId, status: 'end', lat: lat, lng: lng, content: content });
+    calls.push({ action: 'business_report', userId: userId, status: 'end', businessType: chosenType, lat: lat, lng: lng, content: content });
   }
 
   var messages = {
