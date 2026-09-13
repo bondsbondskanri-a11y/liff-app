@@ -612,6 +612,28 @@ async function apiPost(payload) {
   try { return JSON.parse(text); } catch (_) { return { ok: false, error: 'invalid response: ' + text }; }
 }
 function showLoading(b) { document.getElementById('loadingMask').style.display = b ? 'flex' : 'none'; }
+
+/* ---------- 読み取り結果の使い回し ----------
+   GASは1回1〜3秒かかるうえ、同じ人の実行は直列化される。
+   タブを開くたびに同じものを取り直すのをやめ、前回の結果を
+   すぐ表示してから、古ければ裏で取り直す。 */
+function lcGet(key, maxAgeMs) {
+  try {
+    var r = JSON.parse(localStorage.getItem('c_' + key));
+    if (r && (Date.now() - r.t) < maxAgeMs) return r.v;
+  } catch (_) {}
+  return null;
+}
+function lcSet(key, v) {
+  try { localStorage.setItem('c_' + key, JSON.stringify({ t: Date.now(), v: v })); } catch (_) {}
+}
+function lcAge(key) {
+  try {
+    var r = JSON.parse(localStorage.getItem('c_' + key));
+    if (r) return Date.now() - r.t;
+  } catch (_) {}
+  return Infinity;
+}
 function showAlert(type, msg) {
   const el = document.getElementById('alert');
   el.className = 'rounded p-3 mb-4 text-sm ' + (type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700');
@@ -625,7 +647,9 @@ function getGeo() {
     navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), e => reject(e), { enableHighAccuracy: true, timeout: 10000 });
   });
 }
-function fileToCompressedDataURL(file, maxWidth = 1280, quality = 0.85) {
+// 写真は送信時間の大半を占める。文字が読める範囲で軽くする。
+// （領収書の判読に支障が出るようなら、この2つの数字を戻せば元に戻る）
+function fileToCompressedDataURL(file, maxWidth = 1100, quality = 0.75) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1299,15 +1323,29 @@ document.querySelectorAll('.vsec-btn').forEach(btn => btn.addEventListener('clic
   document.querySelectorAll('.vsec-btn').forEach(b => b.classList.toggle('active', b === btn));
   document.querySelectorAll('.vSec').forEach(s => s.classList.toggle('hidden-section', s.id !== 'vSec-' + sec));
 }));
-async function loadVehicleList() {
+// 車両マスタはほとんど変わらないので1日キャッシュする。
+// 全画面マスクは出さない（読み取りのために操作を止める必要がない）。
+function fillVehicleSelect(vehicles) {
   const sel = document.getElementById('vehicleSelect');
-  if (sel.options.length > 1) return;
-  showLoading(true);
-  const res = await apiPost({ action: 'vehicle_list' });
-  showLoading(false);
-  if (res.ok && Array.isArray(res.vehicles)) {
-    res.vehicles.forEach(v => { const o = document.createElement('option'); o.value = v.id; o.textContent = v.label; sel.appendChild(o); });
+  if (!sel || !Array.isArray(vehicles)) return;
+  const keep = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  vehicles.forEach(v => { const o = document.createElement('option'); o.value = v.id; o.textContent = v.label; sel.appendChild(o); });
+  if (keep) sel.value = keep;
+}
+async function loadVehicleList() {
+  const cached = lcGet('vehicles', 24 * 3600 * 1000);
+  if (cached) {
+    fillVehicleSelect(cached);
+    if (lcAge('vehicles') < 3600 * 1000) return;   // 1時間以内なら取り直さない
   }
+  try {
+    const res = await apiPost({ action: 'vehicle_list' });
+    if (res.ok && Array.isArray(res.vehicles)) {
+      lcSet('vehicles', res.vehicles);
+      fillVehicleSelect(res.vehicles);
+    }
+  } catch (_) { /* 取れなくてもキャッシュの内容で使える */ }
 }
 document.querySelectorAll('.vsub-btn').forEach(btn => btn.addEventListener('click', () => {
   vehicleSubType = btn.dataset.vsub;
@@ -1568,6 +1606,7 @@ setTimeout(() => showLoading(false), 5000);
 })();
 
 // === お知らせ機能 ===
+var _notifLoadedAt = 0;      // 最後に取得できた時刻
 let currentNotices = [];
 let currentNoticeId = null;
 let isAdminUser = false;
@@ -1589,6 +1628,10 @@ async function loadNotices() {
     list.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">読み込み中...</div>';
   }
   
+  // 60秒以内に取得済みなら、そのまま表示して終わり
+  // （0件でも「取得済み」として扱う。件数で判定すると毎回取り直しになる）
+  if ((Date.now() - _notifLoadedAt) < 60 * 1000) return;
+
   // バックグラウンドで最新取得
   const res = await apiPost({ action: 'notif_list', userId: userId });
   if (!res.ok) {
@@ -1599,6 +1642,7 @@ async function loadNotices() {
   }
   currentNotices = res.notifications || [];
   try { sessionStorage.setItem('notif_cache_' + userId, JSON.stringify(currentNotices)); } catch(_) {}
+  _notifLoadedAt = Date.now();
   renderNoticeList();
 }
 
@@ -1702,8 +1746,16 @@ async function checkAdminStatus() {
   if (_adminCheckDone) return;
   _adminCheckDone = true;
   try {
+    // 管理者かどうかは滅多に変わらないので1時間は取り直さない
+    var c = lcGet('isadmin_' + userId, 60 * 60 * 1000);
+    if (c !== null) {
+      isAdminUser = !!c;
+      document.getElementById('adminTabBtn').classList.toggle('hidden-section', !isAdminUser);
+      return;
+    }
     const res = await apiPost({ action: 'notif_is_admin', userId: userId });
     isAdminUser = res.ok && res.isAdmin;
+    lcSet('isadmin_' + userId, isAdminUser ? 1 : 0);
     document.getElementById('adminTabBtn').classList.toggle('hidden-section', !isAdminUser);
   } catch (e) {
     _adminCheckDone = false;
@@ -1711,14 +1763,18 @@ async function checkAdminStatus() {
 }
 
 async function loadEmployeeList() {
+  const c = lcGet('emp_' + userId, 30 * 60 * 1000);       // 30分は取り直さない
+  if (c) { employeeListCache = c; return employeeListCache; }
   const res = await apiPost({ action: 'notif_employee_list', userId: userId });
-  if (res.ok) employeeListCache = res.employees || [];
+  if (res.ok) { employeeListCache = res.employees || []; lcSet('emp_' + userId, employeeListCache); }
   return employeeListCache;
 }
 
 async function loadGroupList() {
+  const c = lcGet('grp_' + userId, 30 * 60 * 1000);
+  if (c) { groupListCache = c; return groupListCache; }
   const res = await apiPost({ action: 'notif_group_list', userId: userId });
-  if (res.ok) groupListCache = res.groups || [];
+  if (res.ok) { groupListCache = res.groups || []; lcSet('grp_' + userId, groupListCache); }
   return groupListCache;
 }
 
@@ -1798,15 +1854,18 @@ function clearAdminForm() {
 document.getElementById('btnAdmCreateAndSend').addEventListener('click', () => adminCreate(true));
 document.getElementById('btnAdmCreateDraft').addEventListener('click', () => adminCreate(false));
 
+var _admHistoryAt = 0;
 async function loadAdminHistory() {
   const list = document.getElementById('admHistoryList');
-  list.innerHTML = '<div class="text-gray-500 text-center py-2">読み込み中...</div>';
+  if ((Date.now() - _admHistoryAt) < 60 * 1000 && list.children.length) return;  // 60秒は取り直さない
+  if (!list.children.length) list.innerHTML = '<div class="text-gray-500 text-center py-2">読み込み中...</div>';
   // Use the regular notification list as admin (will show all notifications you sent or received)
   const res = await apiPost({ action: 'notif_list', userId: userId });
   if (!res.ok) {
     list.innerHTML = '<div class="text-red-500">読み込み失敗</div>';
     return;
   }
+  _admHistoryAt = Date.now();
   const items = (res.notifications || []).slice(0, 20);
   if (items.length === 0) {
     list.innerHTML = '<div class="text-gray-500 text-center py-2">送信履歴なし</div>';
@@ -2007,22 +2066,38 @@ async function loadMyProfile() {
   const loading = document.getElementById('myPageLoading');
   const view = document.getElementById('myPageView');
   const edit = document.getElementById('myPageEdit');
-  loading.classList.remove('hidden-section');
-  view.classList.add('hidden-section');
-  edit.classList.add('hidden-section');
+
+  // 前回の内容があれば先に出す（待ち時間ゼロ）
+  const cached = lcGet('profile_' + userId, 7 * 24 * 3600 * 1000);
+  if (cached) {
+    _myProfile = cached;
+    renderMyProfileView();
+    loading.classList.add('hidden-section');
+    view.classList.remove('hidden-section');
+    edit.classList.add('hidden-section');
+    if (lcAge('profile_' + userId) < 10 * 60 * 1000) return;   // 10分以内なら取り直さない
+  } else {
+    loading.classList.remove('hidden-section');
+    view.classList.add('hidden-section');
+    edit.classList.add('hidden-section');
+  }
+
   try {
     const res = await apiPost({ action: 'get_my_profile', userId: userId });
     loading.classList.add('hidden-section');
     if (!res.ok) {
+      if (cached) return;                       // 前回の内容を出したままにする
       view.classList.remove('hidden-section');
       view.innerHTML = '<div class="text-sm text-red-600">' + (res.error || '取得失敗') + '</div>';
       return;
     }
     _myProfile = res.profile;
+    lcSet('profile_' + userId, res.profile);
     renderMyProfileView();
     view.classList.remove('hidden-section');
   } catch (e) {
     loading.classList.add('hidden-section');
+    if (cached) return;                         // 前回の内容を出したままにする
     view.classList.remove('hidden-section');
     view.innerHTML = '<div class="text-sm text-red-600">通信エラー</div>';
   }
